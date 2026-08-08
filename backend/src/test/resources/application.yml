@@ -1,0 +1,26 @@
+# Integration tests run against a separate schema (created by db/setup.sql) so they never touch
+# your dev data. Override via env vars in CI.
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_TEST_DATABASE:nibash_test}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
+    username: ${MYSQL_USER:nibash}
+    password: ${MYSQL_PASSWORD:nibash_dev_password}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: always
+
+nibash:
+  timezone: Asia/Dhaka
+  media-dir: ./build/test-media
+  cors:
+    allowed-origins: http://127.0.0.1:5173

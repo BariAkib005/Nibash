@@ -1,0 +1,60 @@
+server:
+  port: ${SERVER_PORT:8000}
+
+spring:
+  application:
+    name: nibash
+
+  config:
+    # Loads backend/.env (gitignored) so `./mvnw spring-boot:run` picks up local credentials
+    # without exporting anything. Optional — in production the values come from real env vars.
+    import: optional:file:.env[.properties]
+
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:nibash}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
+    username: ${MYSQL_USER:nibash}
+    password: ${MYSQL_PASSWORD:}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate      # Flyway owns the schema; JPA only validates its mappings against it
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+      hibernate.format_sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  jackson:
+    # The API contract is snake_case (avatar_path, due_date, building_id, …).
+    # Jackson 3 already writes java.time values as ISO-8601, so no serialization feature is needed.
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: always
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:25}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SMTP_TLS:false}
+
+nibash:
+  timezone: Asia/Dhaka
+  media-dir: ${NIBASH_MEDIA_DIR:./media}
+  cors:
+    # Vite dev server (spec §13.2). In production Nginx fronts everything, so this is unused.
+    allowed-origins: ${NIBASH_CORS_ORIGINS:http://127.0.0.1:5173,http://localhost:5173}
+
+logging:
+  level:
+    org.springframework.web: INFO
+    com.nibash: DEBUG

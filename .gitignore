@@ -1,0 +1,58 @@
+### Internal docs — kept local, not published ###
+NIBASH_6_WEEK_PLAN.md
+NIBASH_SPRINGBOOT_REBUILD_SPEC.md
+
+### Secrets — never commit ###
+.env
+*.env
+!.env.example
+!**/.env.example
+
+### Java / Maven ###
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+
+### Node / frontend ###
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+### Uploaded media (local dev storage) ###
+media/
+
+### IntelliJ IDEA ###
+out/
+.idea/
+*.iml
+!**/src/main/**/out/
+!**/src/test/**/out/
+.kotlin
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### OS / Office ###
+.DS_Store
+Thumbs.db
+~$*
