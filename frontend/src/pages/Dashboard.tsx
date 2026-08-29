@@ -8,8 +8,10 @@ import PageHeader from '../components/PageHeader'
 import { Badge } from '../components/DataTable'
 
 /**
- * Week 2 dashboard: occupancy metrics computed from the units the caller can actually see.
- * Week 5 replaces this with the single `/api/dashboard/summary/` call and all ~30 sections.
+ * Occupancy metrics computed from the units the caller can actually see.
+ *
+ * <p>This page still makes several calls; the planned `/api/dashboard/summary/` folds them into one
+ * and adds the remaining module sections.
  */
 export default function Dashboard() {
   const { user } = useAuth()
@@ -132,8 +134,8 @@ export default function Dashboard() {
       <Card className="border-dashed bg-slate-50/60">
         <h2 className="text-sm font-semibold text-slate-900">Coming next</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Week 3 brings finance and maintenance — invoices with a monthly generation batch, one-click
-          checkout, expenses with receipts, and a drag-and-drop ticket board.
+          Live group chat and an interactive parking grid, plus a single dashboard call that replaces
+          the several this page makes today.
         </p>
       </Card>
     </div>

@@ -54,10 +54,11 @@ public class DemoSeeder {
     private final StaffRepository staff;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper json;
+    private final ModuleSeeder moduleSeeder;
 
     public DemoSeeder(UserRepository users, BuildingRepository buildings, BuildingSettingRepository settings,
                       UnitRepository units, ResidentRepository residents, StaffRepository staff,
-                      PasswordEncoder passwordEncoder, ObjectMapper json) {
+                      PasswordEncoder passwordEncoder, ObjectMapper json, ModuleSeeder moduleSeeder) {
         this.users = users;
         this.buildings = buildings;
         this.settings = settings;
@@ -66,6 +67,7 @@ public class DemoSeeder {
         this.staff = staff;
         this.passwordEncoder = passwordEncoder;
         this.json = json;
+        this.moduleSeeder = moduleSeeder;
     }
 
     @Transactional
@@ -137,6 +139,9 @@ public class DemoSeeder {
         staffMember(gulshan, staff2, "Kamal Sheikh", "Maintenance", "Plumbing & Electrical", "+8801711000010");
         staffMember(banani, guard2, "Sohel Mia", "Security", "Gate Officer", "+8801711000008");
         report.add("4 staff");
+
+        // Week 3 and 4 module fixtures live in their own seeder (see the note there).
+        report.addAll(moduleSeeder.seed(gulshan, banani, admin1, committee1));
 
         String summary = "Seeded: " + String.join(", ", report) + ". Demo password: " + DEMO_PASSWORD;
         log.info(summary);

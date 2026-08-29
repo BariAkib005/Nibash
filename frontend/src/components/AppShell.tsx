@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useBuilding } from '../lib/building'
+import NotificationBell from './NotificationBell'
+import SosButton from './SosButton'
 import { Logo } from './ui'
 import type { Role } from '../types'
 
@@ -21,10 +23,19 @@ const NAV: NavItem[] = [
   { label: 'Residents', to: '/app/residents', icon: '🏠', roles: ['admin', 'committee'] },
   { label: 'Directory', to: '/app/directory', icon: '📇', roles: ALL },
   { label: 'Staff', to: '/app/staff', icon: '🧰', roles: ['admin', 'committee'] },
-  { label: 'Invoices', to: '/app/invoices', icon: '💳', roles: ['admin', 'committee', 'resident'], soon: true },
-  { label: 'Tickets', to: '/app/tickets', icon: '🔧', roles: ALL, soon: true },
-  { label: 'Visitors', to: '/app/visitors', icon: '🛡️', roles: ['admin', 'committee', 'resident', 'guard'], soon: true },
-  { label: 'Bookings', to: '/app/bookings', icon: '🏛️', roles: ['admin', 'committee', 'resident'], soon: true },
+  { label: 'Invoices', to: '/app/invoices', icon: '💳', roles: ['admin', 'committee', 'resident'] },
+  { label: 'Expenses', to: '/app/expenses', icon: '🧮', roles: ['admin', 'committee'] },
+  { label: 'Maintenance', to: '/app/tickets', icon: '🔧', roles: ALL },
+  { label: 'Notices', to: '/app/notices', icon: '📌', roles: ALL },
+  { label: 'Polls', to: '/app/polls', icon: '🗳️', roles: ALL },
+  { label: 'Events', to: '/app/events', icon: '🎉', roles: ALL },
+  { label: 'Bookings', to: '/app/bookings', icon: '🏛️', roles: ['admin', 'committee', 'resident'] },
+  { label: 'Expected visitors', to: '/app/appointments', icon: '🎟️', roles: ['admin', 'committee', 'resident'] },
+  { label: 'Visitor log', to: '/app/visitors', icon: '🛡️', roles: ['admin', 'committee', 'guard'] },
+  { label: 'Gate scan', to: '/app/scan', icon: '📷', roles: ['admin', 'committee', 'guard'] },
+  { label: 'Gate log', to: '/app/gate', icon: '🚧', roles: ['admin', 'committee', 'guard'] },
+  { label: 'Chat', to: '/app/chat', icon: '💬', roles: ALL, soon: true },
+  { label: 'Parking', to: '/app/parking', icon: '🅿️', roles: ['admin', 'committee', 'resident'], soon: true },
   { label: 'Settings', to: '/app/settings', icon: '⚙️', roles: ALL },
 ]
 
@@ -129,6 +140,12 @@ export default function AppShell() {
                 {current?.address && <p className="truncate text-xs text-slate-500">{current.address}</p>}
               </div>
             )}
+          </div>
+
+          {/* Alerts and SOS sit next to the user menu: reachable from every screen, always. */}
+          <div className="flex items-center gap-1">
+            <SosButton />
+            <NotificationBell />
           </div>
 
           <div className="relative">

@@ -21,6 +21,10 @@ public interface ResidentRepository extends JpaRepository<Resident, Long> {
 
     Page<Resident> findByBuildingIdIn(List<Long> buildingIds, Pageable pageable);
 
+    /** Every resident of one building — the input set for the monthly invoice batch (spec §8.3). */
+    List<Resident> findByBuildingIdOrderByIdAsc(Long buildingId);
+
+
     Optional<Resident> findByIdAndBuildingIdIn(Long id, List<Long> buildingIds);
 
     /**

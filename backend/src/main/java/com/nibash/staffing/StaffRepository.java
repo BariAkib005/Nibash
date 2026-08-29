@@ -25,6 +25,19 @@ public interface StaffRepository extends JpaRepository<Staff, Long> {
 
     Optional<Staff> findByBuildingIdAndName(Long buildingId, String name);
 
+    /**
+     * Ticket auto-assignment, first pass (spec 8.7): the building staff whose role mentions the
+     * ticket category, e.g. category "plumbing" matching role "Plumbing Technician".
+     */
+    @Query("""
+           select s from Staff s
+           where s.building.id = :buildingId
+             and lower(s.role) like lower(concat('%', :category, '%'))
+           order by s.id asc
+           """)
+    List<Staff> findByBuildingAndRoleMatching(@Param("buildingId") Long buildingId,
+                                              @Param("category") String category);
+
     /** Users attached to the caller's buildings as staff — part of the User CRUD scope. */
     @Query("select distinct s.user.id from Staff s where s.building.id in :buildingIds and s.user is not null")
     List<Long> findUserIdsInBuildings(@Param("buildingIds") List<Long> buildingIds);

@@ -41,6 +41,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    /** DRF-style field maps thrown explicitly by a controller (spec §11). */
+    @ExceptionHandler(FieldException.class)
+    public ResponseEntity<Map<String, Object>> handleFieldErrors(FieldException ex) {
+        return ResponseEntity.badRequest().body(Map.copyOf(ex.getErrors()));
+    }
+
     /** Framework-level fallback (spec §11) — never leak a stack trace to the client. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
