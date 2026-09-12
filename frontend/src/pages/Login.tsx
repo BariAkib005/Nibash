@@ -96,9 +96,6 @@ export default function Login() {
 
       <div className="mt-8 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Demo accounts</p>
-        <p className="mt-1 text-xs text-slate-500">
-          Available once the seeder runs in Week 2. Password: <code className="rounded bg-white px-1">{DEMO_PASSWORD}</code>
-        </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {DEMO_ACCOUNTS.map((account) => (
             <button
