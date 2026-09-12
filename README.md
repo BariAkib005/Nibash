@@ -48,6 +48,9 @@ Nibash/
 
 ## First-time setup
 
+> **Prerequisites:** JDK 26, Node.js 22.12+ and MySQL 8 must be installed first.
+> See **[REQUIREMENTS.md](REQUIREMENTS.md)** for versions, install links and first-run troubleshooting.
+
 ### 1. Create the database *(once, needs MySQL admin rights)*
 
 ```bash
@@ -137,6 +140,35 @@ Sign in as `admin1@nibash.bd` / `Nibash@2026` (every demo account shares that pa
 - **Maintenance** — Maintenance → drag a card between columns → open one → attach a photo
 - **Security** — Expected visitors → *Expect a visitor* → show the pass → sign in as `guard1@nibash.bd` → Gate scan → type the code → checked in
 - **Community** — Polls → vote once, then try again → *Already voted* · Bookings → drag two hours → book → drag an overlapping slot → refused before submit
+
+### Demo accounts
+
+Created by the seeder ([`DemoSeeder`](backend/src/main/java/com/nibash/seed/DemoSeeder.java)). **Every account shares the
+password `Nibash@2026`.** The seeder upserts on email, so re-running it leaves an existing account's password alone.
+
+| Email | Password | Name | Role | Building | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `admin1@nibash.bd` | `Nibash@2026` | Imran Chowdhury | admin | Gulshan Lakeview Heights | Back-office — **sees both buildings**. Developer + resident of 02B |
+| `admin2@nibash.bd` | `Nibash@2026` | Nusrat Jahan | admin | Banani Garden Square | Back-office — **sees both buildings**. Developer + resident of 01B |
+| `committee1@nibash.bd` | `Nibash@2026` | Farhana Haque | committee | Gulshan Lakeview Heights | Primary contact · resident of 02A |
+| `committee2@nibash.bd` | `Nibash@2026` | Tanvir Alam | committee | Banani Garden Square | Primary contact · resident of 01A |
+| `resident1@nibash.bd` | `Nibash@2026` | Ayesha Rahman | resident | Gulshan Lakeview Heights | Owner of 01A |
+| `resident2@nibash.bd` | `Nibash@2026` | Rafiq Hasan | resident | Gulshan Lakeview Heights | Tenant of 01B · the directory opt-out case |
+| `guard1@nibash.bd` | `Nibash@2026` | Jamal Uddin | guard | Gulshan Lakeview Heights | Security · Gate Officer — use this one for Gate scan |
+| `guard2@nibash.bd` | `Nibash@2026` | Sohel Mia | guard | Banani Garden Square | Security · Gate Officer |
+| `staff1@nibash.bd` | `Nibash@2026` | Ruma Begum | staff | Gulshan Lakeview Heights | Cleaning · Housekeeping Supervisor |
+| `staff2@nibash.bd` | `Nibash@2026` | Kamal Sheikh | staff | Gulshan Lakeview Heights | Maintenance · Plumbing & Electrical |
+
+Two things that will otherwise confuse you:
+
+- **`admin1` and `admin2` are back-office accounts** (`is_staff` + `is_superuser`), so tenant scoping does not apply to
+  them — they read *every* building, and a foreign building id returns `200`, not `404`. To watch isolation actually
+  work, sign in as `resident1`: `/api/buildings/2/` is then a `404`.
+- **The role filter changes the sidebar.** A resident gets no Units, Staff, Expenses, Gate scan or Visitor log, so the
+  visitor journey needs two accounts — `resident1` creates the pass, `guard1` scans it.
+
+> Local demo fixtures only. The seeder is a dev/back-office tool — never point it at anything real, and never reuse
+> `Nibash@2026` outside a throwaway database.
 
 ---
 
