@@ -43,32 +43,104 @@ build.
 
 ---
 
-## After installing: four setup steps
+## Commands
+
+Two shells are shown because they genuinely differ on Windows. Run every command from the repository
+root unless the comment says otherwise.
+
+### One-time setup (per machine)
+
+**Windows (PowerShell)**
+
+```powershell
+# 1. Create the databases and the app user (needs MySQL admin rights).
+#    NOTE: PowerShell has no "<" redirection — pipe the file instead.
+Get-Content db\setup.sql | mysql -u root -p
+
+# 2. Create the backend config (.env is gitignored, so a fresh clone has none).
+Copy-Item backend\.env.example backend\.env
+
+# 3. Install the frontend packages.
+cd frontend
+npm install
+cd ..
+```
+
+**macOS / Linux (bash or zsh)**
 
 ```bash
-# 1. Create the databases and the app user (once, as a MySQL admin)
-mysql -u root -p < db/setup.sql
-
-# 2. Create the backend config — .env is gitignored, so a fresh clone does NOT have it
-cp backend/.env.example backend/.env      # Windows PowerShell: Copy-Item backend\.env.example backend\.env
-
-# 3. Install the frontend packages (first time only)
-cd frontend && npm install
-
-# 4. Run the two processes in two terminals
-cd backend  && ./mvnw spring-boot:run     # Windows: .\mvnw.cmd spring-boot:run
-cd frontend && npm run dev
+mysql -u root -p < db/setup.sql       # 1. databases + app user
+cp backend/.env.example backend/.env  # 2. backend config
+(cd frontend && npm install)          # 3. frontend packages
 ```
 
 Do **not** create tables by hand — Flyway builds all 57 on the backend's first boot.
 
-To load the demo fixture (accounts, two buildings, invoices, tickets, passes), add `--seed`:
+### Every time you want to run the app
+
+Two terminals, one per process. Leave both open — these are long-running servers, not tasks that finish.
+
+**Terminal 1 — backend** → <http://localhost:8000>
+
+```powershell
+# Windows. Needed in every new terminal unless JDK 26 is already on your PATH.
+$env:JAVA_HOME = "C:\Users\User\.jdks\openjdk-26.0.2"
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+cd backend
+.\mvnw.cmd spring-boot:run
+```
+
+```bash
+# macOS / Linux
+export JAVA_HOME=/path/to/jdk-26        # skip if `java -version` already reports 26
+cd backend && ./mvnw spring-boot:run
+```
+
+**Terminal 2 — frontend** → <http://127.0.0.1:5173>
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open <http://127.0.0.1:5173> in a browser. Stop either server with `Ctrl+C`.
+
+To avoid setting `JAVA_HOME` in every new terminal, set it permanently once:
+
+```powershell
+setx JAVA_HOME "C:\Users\User\.jdks\openjdk-26.0.2"   # then reopen the terminal
+```
+
+### Load the demo data (optional)
+
+Seeds ten accounts, two buildings, invoices, tickets, notices, polls and gate passes. Idempotent — safe
+to run repeatedly. Credentials are in [README.md](README.md#demo-accounts).
+
+```powershell
+cd backend
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--seed"
+```
 
 ```bash
 cd backend && ./mvnw spring-boot:run -Dspring-boot.run.arguments=--seed
 ```
 
-It is idempotent, so running it twice is safe. Demo credentials are in [README.md](README.md#demo-accounts).
+The `--seed` run also starts the server normally, so this replaces the usual backend command rather than
+being an extra step.
+
+### Other useful commands
+
+| Command | What it does |
+| --- | --- |
+| `cd backend` → `.\mvnw.cmd test` | Run the integration suite against the `nibash_test` schema |
+| `cd backend` → `.\mvnw.cmd clean package` | Build the backend jar into `backend/target/` |
+| `cd frontend` → `npm run build` | Type-check and build the production frontend into `frontend/dist/` |
+| `cd frontend` → `npm run lint` | Lint the frontend with oxlint |
+| `cd frontend` → `npm run preview` | Serve the built frontend locally |
+| `net start MySQL80` | Start MySQL on Windows if it isn't running |
+| `brew services start mysql` / `sudo systemctl start mysql` | Same, on macOS / Linux |
+
+On macOS and Linux use `./mvnw` in place of `.\mvnw.cmd`.
 
 ### Where things listen
 
