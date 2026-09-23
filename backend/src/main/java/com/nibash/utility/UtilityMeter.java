@@ -12,6 +12,8 @@ import jakarta.persistence.*;
 @Table(name = "utility_meters")
 public class UtilityMeter {
 
+    public static final java.util.List<String> TYPES = java.util.List.of("electricity", "water", "gas");
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

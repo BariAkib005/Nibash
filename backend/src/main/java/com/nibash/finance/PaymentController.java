@@ -1,5 +1,6 @@
 package com.nibash.finance;
 
+import com.nibash.activity.ActivityLogService;
 import com.nibash.auth.CurrentUser;
 import com.nibash.common.ApiException;
 import com.nibash.common.Body;
@@ -8,6 +9,8 @@ import com.nibash.common.Times;
 import com.nibash.finance.FinanceDtos.PaymentDto;
 import com.nibash.tenancy.TenantService;
 import com.nibash.user.User;
+import com.nibash.utility.UtilityBill;
+import com.nibash.utility.UtilityBillRepository;
 import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -31,11 +34,17 @@ public class PaymentController {
 
     private final PaymentRepository payments;
     private final InvoiceRepository invoices;
+    private final UtilityBillRepository utilityBills;
+    private final ActivityLogService activity;
     private final TenantService tenancy;
 
-    public PaymentController(PaymentRepository payments, InvoiceRepository invoices, TenantService tenancy) {
+    public PaymentController(PaymentRepository payments, InvoiceRepository invoices,
+                             UtilityBillRepository utilityBills, ActivityLogService activity,
+                             TenantService tenancy) {
         this.payments = payments;
         this.invoices = invoices;
+        this.utilityBills = utilityBills;
+        this.activity = activity;
         this.tenancy = tenancy;
     }
 
@@ -98,6 +107,22 @@ public class PaymentController {
 
         invoice.setStatus(Invoice.PAID);
         invoices.save(invoice);
+
+        // Utility bills rolled into this invoice are settled with it (pending → billed → paid).
+        List<Long> utilityBillIds = invoice.getItems().stream()
+                .map(InvoiceItem::getUtilityBillId)
+                .filter(java.util.Objects::nonNull)
+                .map(Integer::longValue)
+                .toList();
+        if (!utilityBillIds.isEmpty()) {
+            for (UtilityBill bill : utilityBills.findByIdIn(utilityBillIds)) {
+                bill.setStatus(UtilityBill.PAID);
+            }
+        }
+
+        activity.record(caller, "invoice", invoice.getId(), "paid",
+                Map.of("amount", saved.getAmount(), "method", saved.getMethod(),
+                        "invoice_number", invoice.getInvoiceNumber()));
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("checkout_status", "paid");

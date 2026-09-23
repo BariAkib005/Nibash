@@ -10,6 +10,10 @@ import java.time.LocalDate;
 public class UtilityBill {
 
     public static final String PENDING = "pending";
+    /** Rolled into a resident's invoice by {@code generate-monthly}; never billed twice. */
+    public static final String BILLED = "billed";
+    public static final String PAID = "paid";
+    public static final java.util.List<String> STATUSES = java.util.List.of(PENDING, BILLED, PAID);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

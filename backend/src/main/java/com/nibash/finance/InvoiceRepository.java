@@ -53,10 +53,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
            select i from Invoice i
              join fetch i.resident r
              join fetch r.user u
-           where i.status = 'pending' and i.dueDate <= :cutoff
+           where i.status in ('pending', 'overdue') and i.dueDate <= :cutoff
            order by i.dueDate asc
            """)
     List<Invoice> findDueForReminder(@Param("cutoff") LocalDate cutoff);
 
     List<Invoice> findByBuildingIdOrderByCreatedAtDesc(Long buildingId);
+
+    /**
+     * Flips past-due pending invoices to {@code overdue} — the daily job the spec sanctions (§15.10).
+     * Paid invoices are untouched; the reminder query still picks overdue ones up.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("update Invoice i set i.status = 'overdue' where i.status = 'pending' and i.dueDate < :today")
+    int markOverdue(@Param("today") LocalDate today);
 }

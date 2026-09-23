@@ -1,5 +1,6 @@
 package com.nibash.finance;
 
+import com.nibash.activity.ActivityLogService;
 import com.nibash.auth.CurrentUser;
 import com.nibash.building.Building;
 import com.nibash.building.BuildingRepository;
@@ -7,7 +8,12 @@ import com.nibash.common.ApiException;
 import com.nibash.common.Body;
 import com.nibash.common.PageEnvelope;
 import com.nibash.common.Policy;
+import com.nibash.common.Times;
 import com.nibash.finance.FinanceDtos.InvoiceDto;
+import com.nibash.jobs.InvoiceJobs;
+import com.nibash.jobs.NotificationService;
+import com.nibash.notification.Notification;
+import com.nibash.notification.NotificationRepository;
 import com.nibash.resident.Resident;
 import com.nibash.resident.ResidentRepository;
 import com.nibash.tenancy.TenantService;
@@ -40,16 +46,24 @@ public class InvoiceController {
     private final ResidentRepository residents;
     private final BuildingRepository buildings;
     private final UtilityBillRepository utilityBills;
+    private final NotificationService outbound;
+    private final NotificationRepository notifications;
+    private final ActivityLogService activity;
     private final TenantService tenancy;
 
     public InvoiceController(InvoiceRepository invoices, BillTypeRepository billTypes,
                              ResidentRepository residents, BuildingRepository buildings,
-                             UtilityBillRepository utilityBills, TenantService tenancy) {
+                             UtilityBillRepository utilityBills, NotificationService outbound,
+                             NotificationRepository notifications, ActivityLogService activity,
+                             TenantService tenancy) {
         this.invoices = invoices;
         this.billTypes = billTypes;
         this.residents = residents;
         this.buildings = buildings;
         this.utilityBills = utilityBills;
+        this.outbound = outbound;
+        this.notifications = notifications;
+        this.activity = activity;
         this.tenancy = tenancy;
     }
 
@@ -182,21 +196,47 @@ public class InvoiceController {
             if (includeUtilities && resident.getUnit() != null) {
                 for (UtilityBill bill : utilityBills.findPendingForUnit(resident.getUnit().getId())) {
                     invoice.addItem(utilityItem(bill));
+                    // Without this a pending bill would be rolled into every later month's invoice too.
+                    bill.setStatus(UtilityBill.BILLED);
+                    utilityBills.save(bill);
                 }
             }
             invoice.setAmount(sumItems(invoice));
             created.add(invoices.save(invoice).getId());
         }
 
+        if (!created.isEmpty()) {
+            activity.record(caller, "building", buildingId, "generate_monthly_invoices",
+                    Map.of("billing_month", billingMonth.toString(), "created", created.size()));
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("created_invoices", created));
     }
 
-    /** Stub hook for the reminder channel (spec §8.3); the scheduled job is the real sender. */
+    /**
+     * The reminder hook (spec §8.3): emails the resident through the same channel and wording as
+     * the 08:00 job, and drops an in-app notification so the reminder is visible even where SMTP
+     * isn't configured. The response contract is unchanged.
+     */
     @PostMapping("/{id}/remind/")
-    @Transactional(readOnly = true)
+    @Transactional
     public Map<String, Object> remind(@PathVariable Long id) {
         Policy.requireManager();
         Invoice invoice = scoped(id);
+        if (Invoice.PAID.equals(invoice.getStatus())) {
+            throw ApiException.badRequest("Invoice is already paid.");
+        }
+        outbound.email(invoice.getResident().getUser().getEmail(),
+                InvoiceJobs.subject(invoice), InvoiceJobs.body(invoice));
+
+        Notification notice = new Notification();
+        notice.setBuilding(invoice.getBuilding());
+        notice.setResident(invoice.getResident());
+        notice.setType("invoice");
+        notice.setMessage("Reminder: invoice %s of ৳%s is due on %s."
+                .formatted(invoice.getInvoiceNumber(), invoice.getAmount().stripTrailingZeros().toPlainString(),
+                        invoice.getDueDate()));
+        notice.setSentAt(Times.now());
+        notifications.save(notice);
         return Map.of("detail", "Reminder queued for invoice " + invoice.getInvoiceNumber());
     }
 
