@@ -35,6 +35,16 @@ const Visitors = lazy(() => import('./pages/Visitors'))
 const GuardScan = lazy(() => import('./pages/GuardScan'))
 const GateLog = lazy(() => import('./pages/GateLog'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Chat = lazy(() => import('./pages/Chat'))
+const Parking = lazy(() => import('./pages/Parking'))
+const Documents = lazy(() => import('./pages/Documents'))
+const Vendors = lazy(() => import('./pages/Vendors'))
+const Facilities = lazy(() => import('./pages/Facilities'))
+const Utilities = lazy(() => import('./pages/Utilities'))
+const Rentals = lazy(() => import('./pages/Rentals'))
+const Safety = lazy(() => import('./pages/Safety'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const Activity = lazy(() => import('./pages/Activity'))
 
 /** Shown while a route chunk downloads — a skeleton, never a spinner on a blank page. */
 function RouteFallback() {
@@ -94,9 +104,21 @@ export default function App() {
               <Route path="scan" element={<GuardScan />} />
               <Route path="gate" element={<GateLog />} />
 
+              {/* realtime, facilities & the long tail (Week 5) */}
+              <Route path="chat" element={<Chat />} />
+              <Route path="parking" element={<Parking />} />
+              <Route path="documents" element={<Documents />} />
+              <Route path="vendors" element={<Vendors />} />
+              <Route path="facilities" element={<Facilities />} />
+              <Route path="utilities" element={<Utilities />} />
+              <Route path="rentals" element={<Rentals />} />
+              <Route path="safety" element={<Safety />} />
+              <Route path="portfolio" element={<Portfolio />} />
+              <Route path="activity" element={<Activity />} />
+
               <Route path="settings" element={<Settings />} />
 
-              {/* Chat and parking mount here in Week 5; anything else falls back to the dashboard. */}
+              {/* Anything else falls back to the dashboard. */}
               <Route path="*" element={<Navigate to="/app" replace />} />
             </Route>
 

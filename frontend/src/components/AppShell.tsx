@@ -19,6 +19,7 @@ interface NavItem {
 const ALL: Role[] = ['admin', 'committee', 'resident', 'guard', 'staff']
 const NAV: NavItem[] = [
   { label: 'Overview', to: '/app', icon: 'overview', roles: ALL, group: 'Workspace' },
+  { label: 'Portfolio', to: '/app/portfolio', icon: 'layers', roles: ['admin', 'committee'], group: 'Workspace' },
   { label: 'Units', to: '/app/units', icon: 'building', roles: ['admin', 'committee'], group: 'Workspace' },
   {
     label: 'Residents',
@@ -29,6 +30,8 @@ const NAV: NavItem[] = [
   },
   { label: 'Directory', to: '/app/directory', icon: 'directory', roles: ALL, group: 'Workspace' },
   { label: 'Staff', to: '/app/staff', icon: 'people', roles: ['admin', 'committee'], group: 'Workspace' },
+  { label: 'Documents', to: '/app/documents', icon: 'file', roles: ALL, group: 'Workspace' },
+  { label: 'Activity', to: '/app/activity', icon: 'activity', roles: ['admin', 'committee'], group: 'Workspace' },
   {
     label: 'Invoices',
     to: '/app/invoices',
@@ -44,6 +47,16 @@ const NAV: NavItem[] = [
     group: 'Operations',
   },
   { label: 'Maintenance', to: '/app/tickets', icon: 'tool', roles: ALL, group: 'Operations' },
+  {
+    label: 'Utilities',
+    to: '/app/utilities',
+    icon: 'bolt',
+    roles: ['admin', 'committee'],
+    group: 'Operations',
+  },
+  { label: 'Facilities', to: '/app/facilities', icon: 'lift', roles: ALL, group: 'Operations' },
+  { label: 'Vendors', to: '/app/vendors', icon: 'store', roles: ALL, group: 'Operations' },
+  { label: 'Parking', to: '/app/parking', icon: 'car', roles: ALL, group: 'Operations' },
   { label: 'Notices', to: '/app/notices', icon: 'notice', roles: ALL, group: 'Community' },
   { label: 'Polls', to: '/app/polls', icon: 'poll', roles: ALL, group: 'Community' },
   { label: 'Events', to: '/app/events', icon: 'calendar', roles: ALL, group: 'Community' },
@@ -51,6 +64,14 @@ const NAV: NavItem[] = [
     label: 'Bookings',
     to: '/app/bookings',
     icon: 'calendar',
+    roles: ['admin', 'committee', 'resident'],
+    group: 'Community',
+  },
+  { label: 'Chat', to: '/app/chat', icon: 'chat', roles: ALL, group: 'Community' },
+  {
+    label: 'Rentals',
+    to: '/app/rentals',
+    icon: 'home',
     roles: ['admin', 'committee', 'resident'],
     group: 'Community',
   },
@@ -82,6 +103,7 @@ const NAV: NavItem[] = [
     roles: ['admin', 'committee', 'guard'],
     group: 'Security',
   },
+  { label: 'Safety & access', to: '/app/safety', icon: 'phone', roles: ALL, group: 'Security' },
   { label: 'Settings', to: '/app/settings', icon: 'settings', roles: ALL, group: 'Preferences' },
 ]
 

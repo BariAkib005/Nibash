@@ -1,4 +1,28 @@
 import type {
+  AnalyticsOverview,
+  ApiAccessCard,
+  ApiActivity,
+  ApiAsset,
+  ApiAssetMaintenance,
+  ApiChatRoom,
+  ApiDocument,
+  ApiDocumentAudit,
+  ApiIntercomDevice,
+  ApiIntercomLog,
+  ApiLiftStatus,
+  ApiListing,
+  ApiMessage,
+  ApiParkingSlot,
+  ApiRentalRequest,
+  ApiReview,
+  ApiService,
+  ApiUtilityBill,
+  ApiUtilityMeter,
+  ApiVehicle,
+  ApiVendor,
+  ApiWasteSchedule,
+  ParkingLayout,
+  PriceEstimate,
   ApiAppointment,
   ApiAttendance,
   ApiAttendee,
@@ -43,6 +67,16 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY)
+}
+
+/**
+ * The chat socket for a room. Browsers cannot set headers on a WebSocket, so the token rides in the
+ * query string; the server validates it during the handshake. Same origin in dev (Vite proxies /ws)
+ * and in production (Nginx does), so no absolute host is needed.
+ */
+export function chatSocketUrl(roomId: number): string {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${scheme}://${window.location.host}/ws/chat/${roomId}/?token=${encodeURIComponent(getToken() ?? '')}`
 }
 
 /**
@@ -412,4 +446,189 @@ export const api = {
 
   cancelBooking: (id: number) =>
     request<ApiBooking>(`/api/bookings/${id}/`, { method: 'PATCH', body: { status: 'cancelled' } }),
+
+  // ---------------------------------------------------------------- vendors (Week 5)
+  services: () => request<Page<ApiService>>('/api/services/'),
+
+  vendors: (params: { page?: number; building_id?: number; service_id?: number } = {}) =>
+    request<Page<ApiVendor>>(`/api/vendors/${qs(params)}`),
+
+  createVendor: (body: {
+    building?: number
+    service: number
+    name: string
+    contact_info?: string
+    latitude?: string
+    longitude?: string
+  }) => request<ApiVendor>('/api/vendors/', { method: 'POST', body }),
+
+  nearbyVendors: (params: { service_id: number; lat: number; lng: number; radius_km: number }) =>
+    request<{ count: number; results: ApiVendor[] }>(`/api/vendors/nearby/${qs(params)}`),
+
+  reviews: (params: { page?: number; building_id?: number; vendor_id?: number } = {}) =>
+    request<Page<ApiReview>>(`/api/reviews/${qs(params)}`),
+
+  createReview: (body: { vendor: number; rating: number; comment?: string }) =>
+    request<ApiReview>('/api/reviews/', { method: 'POST', body }),
+
+  // ---------------------------------------------------------------- chat (Week 5)
+  chatRooms: (building_id?: number) => request<Page<ApiChatRoom>>(`/api/chat/rooms/${qs({ building_id })}`),
+
+  createChatRoom: (body: { building: number; name: string; is_public: boolean }) =>
+    request<ApiChatRoom>('/api/chat/rooms/', { method: 'POST', body }),
+
+  /** Newest page first; the screen reverses it so the stream reads oldest → newest. */
+  chatMessages: (room_id: number, page = 1) =>
+    request<Page<ApiMessage>>(`/api/chat/messages/${qs({ room_id, page, latest: 'true' })}`),
+
+  sendChatMessage: (room: number, content: string) =>
+    request<ApiMessage>('/api/chat/messages/', { method: 'POST', body: { room, content } }),
+
+  // ---------------------------------------------------------------- documents (Week 5)
+  documents: (params: { page?: number; building_id?: number; search?: string; is_active?: boolean } = {}) =>
+    request<Page<ApiDocument>>(
+      `/api/documents/${qs({ ...params, is_active: params.is_active === undefined ? undefined : String(params.is_active) })}`,
+    ),
+
+  uploadDocument: (fields: { building: number; title: string; parent?: number }, file: File) => {
+    const form = new FormData()
+    form.append('building', String(fields.building))
+    form.append('title', fields.title)
+    if (fields.parent) form.append('parent', String(fields.parent))
+    form.append('file', file)
+    return upload<ApiDocument>('/api/documents/', form)
+  },
+
+  updateDocument: (id: number, body: { title?: string; is_active?: boolean }) =>
+    request<ApiDocument>(`/api/documents/${id}/`, { method: 'PATCH', body }),
+
+  downloadDocument: (id: number) => request<{ file_path: string }>(`/api/documents/${id}/download/`),
+
+  documentAudit: (id: number) => request<ApiDocumentAudit[]>(`/api/documents/${id}/audit/`),
+
+  documentVersions: (id: number) => request<ApiDocument[]>(`/api/documents/${id}/versions/`),
+
+  // ---------------------------------------------------------------- parking (Week 5)
+  parkingSlots: (building_id?: number) =>
+    request<Page<ApiParkingSlot>>(`/api/parking/slots/${qs({ building_id, page_size: 144 })}`),
+
+  parkingLayout: (building_id?: number) => request<ParkingLayout>(`/api/parking/layout/${qs({ building_id })}`),
+
+  generateParkingLayout: (body: { building_id: number; rows: number; columns: number; prefix: string }) =>
+    request<{ layout: ParkingLayout; slots: ApiParkingSlot[] }>('/api/parking/layout/', { method: 'POST', body }),
+
+  updateSlot: (id: number, body: { status: string }) =>
+    request<ApiParkingSlot>(`/api/parking/slots/${id}/`, { method: 'PATCH', body }),
+
+  vehicles: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiVehicle>>(`/api/vehicles/${qs(params)}`),
+
+  createVehicle: (body: { building?: number; resident?: number; vehicle_number: string; type: string }) =>
+    request<ApiVehicle>('/api/vehicles/', { method: 'POST', body }),
+
+  assignVehicle: (id: number, parking_slot: number | null) =>
+    request<ApiVehicle>(`/api/vehicles/${id}/`, { method: 'PATCH', body: { parking_slot } }),
+
+  deleteVehicle: (id: number) => request<void>(`/api/vehicles/${id}/`, { method: 'DELETE' }),
+
+  // ---------------------------------------------------------------- facilities (Week 5)
+  assets: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiAsset>>(`/api/assets/${qs(params)}`),
+
+  createAsset: (body: Record<string, unknown>) => request<ApiAsset>('/api/assets/', { method: 'POST', body }),
+
+  assetMaintenance: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiAssetMaintenance>>(`/api/asset-maintenance/${qs(params)}`),
+
+  createAssetMaintenance: (body: Record<string, unknown>) =>
+    request<ApiAssetMaintenance>('/api/asset-maintenance/', { method: 'POST', body }),
+
+  completeAssetMaintenance: (id: number, completed_date: string) =>
+    request<ApiAssetMaintenance>(`/api/asset-maintenance/${id}/`, { method: 'PATCH', body: { completed_date } }),
+
+  liftsCurrent: (building_id?: number) =>
+    request<{ results: ApiLiftStatus[] }>(`/api/lifts/current/${qs({ building_id })}`),
+
+  reportLift: (body: { building: number; asset: number | null; status: string }) =>
+    request<ApiLiftStatus>('/api/lifts/status/', { method: 'POST', body }),
+
+  wasteSchedules: (building_id?: number) =>
+    request<Page<ApiWasteSchedule>>(`/api/waste-schedules/${qs({ building_id })}`),
+
+  createWasteSchedule: (body: { building: number; schedule_time: string; recurring: string }) =>
+    request<ApiWasteSchedule>('/api/waste-schedules/', { method: 'POST', body }),
+
+  deleteWasteSchedule: (id: number) => request<void>(`/api/waste-schedules/${id}/`, { method: 'DELETE' }),
+
+  // ---------------------------------------------------------------- utilities (Week 5)
+  utilityMeters: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiUtilityMeter>>(`/api/utility-meters/${qs(params)}`),
+
+  createUtilityMeter: (body: { unit: number; type: string; meter_number: string }) =>
+    request<ApiUtilityMeter>('/api/utility-meters/', { method: 'POST', body }),
+
+  utilityBills: (params: { page?: number; building_id?: number; status?: string } = {}) =>
+    request<Page<ApiUtilityBill>>(`/api/utility-bills/${qs(params)}`),
+
+  updateUtilityBill: (id: number, body: { reading_value?: string; amount?: string }) =>
+    request<ApiUtilityBill>(`/api/utility-bills/${id}/`, { method: 'PATCH', body }),
+
+  generateUtilityBills: (building_id: number, month: string) =>
+    request<{ created_bills: number[] }>('/api/utility-bills/generate/', {
+      method: 'POST',
+      body: { building_id, month },
+    }),
+
+  // ---------------------------------------------------------------- rentals (Week 5)
+  listings: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiListing>>(`/api/listings/${qs(params)}`),
+
+  createListing: (body: Record<string, unknown>) =>
+    request<ApiListing>('/api/listings/', { method: 'POST', body }),
+
+  deleteListing: (id: number) => request<void>(`/api/listings/${id}/`, { method: 'DELETE' }),
+
+  rentalRequests: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiRentalRequest>>(`/api/rental-requests/${qs(params)}`),
+
+  requestRental: (listing: number) =>
+    request<ApiRentalRequest>('/api/rental-requests/', { method: 'POST', body: { listing } }),
+
+  decideRental: (id: number, status: 'approved' | 'rejected') =>
+    request<ApiRentalRequest>(`/api/rental-requests/${id}/`, { method: 'PATCH', body: { status } }),
+
+  withdrawRental: (id: number) => request<void>(`/api/rental-requests/${id}/`, { method: 'DELETE' }),
+
+  /**
+   * Public (AllowAny) — a cache miss answers 202 with a null estimate rather than an error,
+   * which `request` treats as success, so the screen just shows "not available yet".
+   */
+  priceEstimate: (city: string) =>
+    request<PriceEstimate>('/api/ml/price-estimate', { method: 'POST', body: { city }, auth: false }),
+
+  // ---------------------------------------------------------------- security & safety (Week 5)
+  intercomDevices: (building_id?: number) =>
+    request<Page<ApiIntercomDevice>>(`/api/intercom/devices/${qs({ building_id })}`),
+
+  intercomLogs: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiIntercomLog>>(`/api/intercom/logs/${qs(params)}`),
+
+  createIntercomDevice: (body: { building: number; device_name: string; ip_address: string }) =>
+    request<ApiIntercomDevice>('/api/intercom/devices/', { method: 'POST', body }),
+
+  accessCards: (params: { page?: number; building_id?: number } = {}) =>
+    request<Page<ApiAccessCard>>(`/api/access-cards/${qs(params)}`),
+
+  updateAccessCard: (id: number, status: string) =>
+    request<ApiAccessCard>(`/api/access-cards/${id}/`, { method: 'PATCH', body: { status } }),
+
+  createAccessCard: (body: { resident: number; card_number: string }) =>
+    request<ApiAccessCard>('/api/access-cards/', { method: 'POST', body }),
+
+  // ---------------------------------------------------------------- platform (Week 5)
+  activity: (params: { page?: number; building_id?: number; entity_type?: string } = {}) =>
+    request<Page<ApiActivity>>(`/api/activity-logs/${qs(params)}`),
+
+  /** Multi-building KPIs (spec §8.24) — no trailing slash, as the contract specifies. */
+  analyticsOverview: () => request<AnalyticsOverview>('/api/analytics/overview'),
 }

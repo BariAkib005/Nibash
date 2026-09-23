@@ -374,3 +374,282 @@ export interface ApiBooking {
   resource_name: string
   resident_name: string
 }
+
+// ---------------------------------------------------------------- Week 5: vendors
+
+export interface ApiService {
+  id: number
+  name: string
+  parent: number | null
+}
+
+export interface ApiVendor {
+  id: number
+  service: number
+  building: number | null
+  name: string
+  contact_info: string | null
+  rating: string | number | null
+  latitude: string | number | null
+  longitude: string | number | null
+  created_at: string | null
+  service_name: string
+  /** Only set by the nearby search. */
+  distance_km: number | null
+}
+
+export interface ApiReview {
+  id: number
+  vendor: number
+  resident: number
+  rating: number
+  comment: string | null
+  created_at: string
+  resident_name: string
+  vendor_name: string
+}
+
+// ---------------------------------------------------------------- chat
+
+export interface ApiChatRoom {
+  id: number
+  name: string
+  is_public: boolean
+  building: number
+}
+
+export interface ApiMessage {
+  id: number
+  room: number
+  resident: number
+  content: string
+  sent_at: string
+  sender_name: string
+  sender_user: number
+}
+
+/** Frames pushed by /ws/chat/{roomId}/. */
+export type ChatFrame =
+  | { type: 'message.created'; message: ApiMessage }
+  | { type: 'typing'; sender: string; user_id: number }
+  | { type: 'message'; text: string; sender: string }
+
+// ---------------------------------------------------------------- documents
+
+export interface ApiDocument {
+  id: number
+  building: number
+  title: string
+  file_path: string
+  version: number
+  mime_type: string | null
+  parent: number | null
+  is_active: boolean
+  uploaded_by: number
+  uploaded_at: string
+  uploaded_by_name: string
+}
+
+export interface ApiDocumentAudit {
+  id: number
+  document: number
+  user: number
+  event_type: 'edit' | 'download' | 'view'
+  event_time: string
+  user_name: string
+}
+
+// ---------------------------------------------------------------- parking
+
+export type SlotStatus = 'available' | 'occupied' | 'reserved'
+
+export interface ApiParkingSlot {
+  id: number
+  building: number
+  slot_number: string
+  status: SlotStatus
+}
+
+export interface ParkingLayout {
+  rows: number
+  columns: number
+  prefix: string
+}
+
+export interface ApiVehicle {
+  id: number
+  resident: number
+  parking_slot: number | null
+  vehicle_number: string
+  type: 'car' | 'motorbike' | 'bicycle' | 'other'
+  registered_at: string
+  resident_name: string
+  unit_number: string | null
+  slot_number: string | null
+}
+
+// ---------------------------------------------------------------- facilities
+
+export type WarrantyState = 'active' | 'expiring' | 'expired' | null
+
+export interface ApiAsset {
+  id: number
+  building: number
+  name: string
+  type: string
+  purchase_date: string | null
+  warranty_expiry: string | null
+  status: 'operational' | 'under_maintenance' | 'out_of_service' | 'decommissioned'
+  warranty_state: WarrantyState
+}
+
+export interface ApiAssetMaintenance {
+  id: number
+  asset: number
+  scheduled_date: string
+  completed_date: string | null
+  description: string | null
+  cost: string | number | null
+  vendor: number | null
+  asset_name: string
+  vendor_name: string | null
+}
+
+export type LiftStatus = 'operational' | 'maintenance' | 'out_of_order'
+
+export interface ApiLiftStatus {
+  id: number
+  building: number
+  asset: number | null
+  status: LiftStatus
+  timestamp: string
+  name: string
+}
+
+export interface ApiWasteSchedule {
+  id: number
+  building: number
+  schedule_time: string
+  recurring: 'daily' | 'weekly' | 'biweekly' | 'monthly' | null
+  next_occurrence: string | null
+}
+
+// ---------------------------------------------------------------- utilities
+
+export interface ApiUtilityMeter {
+  id: number
+  unit: number
+  type: 'electricity' | 'water' | 'gas'
+  meter_number: string
+  unit_number: string
+}
+
+export interface ApiUtilityBill {
+  id: number
+  meter: number
+  reading_date: string
+  reading_value: string | number
+  amount: string | number
+  status: 'pending' | 'billed' | 'paid'
+  meter_number: string
+  meter_type: ApiUtilityMeter['type']
+  unit: number
+  unit_number: string
+}
+
+// ---------------------------------------------------------------- rentals
+
+export interface ApiListing {
+  id: number
+  resident: number
+  building: number
+  unit: number | null
+  title: string
+  description: string
+  rent: string | number
+  available_from: string
+  created_at: string
+  resident_name: string
+  unit_number: string | null
+  lister_user: number
+}
+
+export interface ApiRentalRequest {
+  id: number
+  listing: number
+  tenant: number
+  status: 'pending' | 'approved' | 'rejected'
+  requested_at: string
+  listing_title: string
+  tenant_name: string
+  tenant_user: number
+  lister_user: number
+}
+
+export interface PriceEstimate {
+  city: string
+  estimate: string | number | null
+  currency: string
+  model_version: string
+}
+
+// ---------------------------------------------------------------- security & safety
+
+export interface ApiIntercomDevice {
+  id: number
+  building: number
+  device_name: string
+  ip_address: string
+}
+
+export interface ApiIntercomLog {
+  id: number
+  device: number
+  event_type: string
+  timestamp: string
+  details: string | null
+  device_name: string
+}
+
+export interface ApiAccessCard {
+  id: number
+  resident: number
+  card_number: string
+  issued_at: string
+  status: 'active' | 'lost' | 'revoked'
+  resident_name: string
+  unit_number: string | null
+}
+
+// ---------------------------------------------------------------- platform
+
+export interface ApiActivity {
+  id: number
+  user: number
+  entity_type: string
+  entity_id: number
+  action: string
+  details_json: string | null
+  timestamp: string
+  user_name: string
+}
+
+export interface BuildingKpis {
+  building_id: number
+  name: string
+  invoices: number
+  payments_sum: number
+  open_tickets: number
+  bookings: number
+  occupancy: number
+  total_units: number
+}
+
+export interface AnalyticsOverview {
+  invoices: number
+  payments_sum: number
+  open_tickets: number
+  bookings: number
+  occupancy: number
+  per_building: BuildingKpis[]
+}
