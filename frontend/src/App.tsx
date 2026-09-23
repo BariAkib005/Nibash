@@ -45,6 +45,7 @@ const Rentals = lazy(() => import('./pages/Rentals'))
 const Safety = lazy(() => import('./pages/Safety'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Activity = lazy(() => import('./pages/Activity'))
+const MyShift = lazy(() => import('./pages/MyShift'))
 
 /** Shown while a route chunk downloads — a skeleton, never a spinner on a blank page. */
 function RouteFallback() {
@@ -115,6 +116,7 @@ export default function App() {
               <Route path="safety" element={<Safety />} />
               <Route path="portfolio" element={<Portfolio />} />
               <Route path="activity" element={<Activity />} />
+              <Route path="shift" element={<MyShift />} />
 
               <Route path="settings" element={<Settings />} />
 

@@ -46,6 +46,7 @@ const NAV: NavItem[] = [
     roles: ['admin', 'committee'],
     group: 'Operations',
   },
+  { label: 'My shift', to: '/app/shift', icon: 'calendar', roles: ['guard', 'staff'], group: 'Operations' },
   { label: 'Maintenance', to: '/app/tickets', icon: 'tool', roles: ALL, group: 'Operations' },
   {
     label: 'Utilities',
