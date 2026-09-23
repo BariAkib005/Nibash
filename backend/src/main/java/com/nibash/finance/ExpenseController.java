@@ -73,14 +73,27 @@ public class ExpenseController {
      * Create an expense. Accepts JSON or multipart so the receipt can arrive with the row in one
      * request — the frontend's form does exactly that.
      */
-    @PostMapping(value = "/", consumes = {"application/json", "multipart/form-data"})
+    @PostMapping(value = "/", consumes = "application/json")
     @Transactional
-    public ResponseEntity<ExpenseDto> create(@RequestParam(required = false) Map<String, Object> form,
-                                             @RequestBody(required = false) Map<String, Object> json,
-                                             @RequestPart(name = "receipt", required = false) MultipartFile receipt) {
+    public ResponseEntity<ExpenseDto> create(@RequestBody Map<String, Object> body) {
+        return create(body, null);
+    }
+
+    /**
+     * The form the expenses screen submits. JSON and multipart are separate handlers on purpose:
+     * one method taking both {@code @RequestBody} and {@code @RequestPart} makes Spring try to read
+     * the multipart body as JSON, and every upload fails with 415 before reaching this code.
+     */
+    @PostMapping(value = "/", consumes = "multipart/form-data")
+    @Transactional
+    public ResponseEntity<ExpenseDto> createWithReceipt(@RequestParam Map<String, Object> form,
+                                                        @RequestPart(name = "receipt", required = false) MultipartFile receipt) {
+        return create(form, receipt);
+    }
+
+    private ResponseEntity<ExpenseDto> create(Map<String, Object> body, MultipartFile receipt) {
         Policy.requireManager();
         User caller = CurrentUser.require();
-        Map<String, Object> body = json != null ? json : form == null ? Map.of() : form;
 
         Long buildingId = Body.requireLong(body, "building");
         tenancy.requireAccess(caller, buildingId);
@@ -96,6 +109,7 @@ public class ExpenseController {
         apply(expense, body);
 
         if (receipt != null && !receipt.isEmpty()) {
+            storage.requireType(receipt, StorageService.RECEIPT_TYPES);
             expense.setReceiptPath(storage.store(receipt, "receipts"));
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(ExpenseDto.from(expenses.save(expense)));
@@ -143,6 +157,7 @@ public class ExpenseController {
         if (file == null || file.isEmpty()) {
             throw ApiException.badRequest("file is required");
         }
+        storage.requireType(file, StorageService.RECEIPT_TYPES);
         expense.setReceiptPath(storage.store(file, "receipts"));
         return ExpenseDto.from(expenses.save(expense));
     }

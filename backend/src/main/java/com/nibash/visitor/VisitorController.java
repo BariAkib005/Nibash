@@ -61,9 +61,10 @@ public class VisitorController {
      * The gate scan (spec §8.6) — the one endpoint a guard actually uses, from a phone.
      *
      * <p>Three rules make it safe to hammer: the token is resolved <b>within the caller's
-     * buildings</b>, so a token from another building is simply "not found"; a pass whose day has
-     * passed is refused; and the visitor row is get-or-created with {@code checkin_time} stamped
-     * only once, so re-scanning the same pass is idempotent rather than rewriting the arrival time.
+     * buildings</b>, so a token from another building is simply "not found"; a pass is valid only on
+     * its scheduled day, so earlier and later scans are both refused; and the visitor row is
+     * get-or-created with {@code checkin_time} stamped only once, so re-scanning the same pass is
+     * idempotent rather than rewriting the arrival time.
      */
     @PostMapping("/scan/")
     @Transactional
@@ -79,8 +80,13 @@ public class VisitorController {
                 .orElseThrow(() -> ApiException.notFound("Not found."));
 
         // Date, not instant: a visitor expected at 14:00 who turns up at 19:00 still gets in today.
-        if (appointment.getScheduledTime().toLocalDate().isBefore(LocalDate.now())) {
+        LocalDate passDate = appointment.getScheduledTime().toLocalDate();
+        if (passDate.isBefore(LocalDate.now())) {
             throw ApiException.badRequest("Appointment has expired");
+        }
+        // The pass says it is valid on its day — so it must not open the gate days early either.
+        if (passDate.isAfter(LocalDate.now())) {
+            throw ApiException.badRequest("This pass is for " + passDate + " and isn't valid yet.");
         }
 
         Visitor visitor = visitors.findFirstByAppointmentIdOrderByIdAsc(appointment.getId())

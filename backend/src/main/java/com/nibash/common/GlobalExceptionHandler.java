@@ -5,6 +5,11 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -47,11 +52,63 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(Map.copyOf(ex.getErrors()));
     }
 
-    /** Framework-level fallback (spec §11) — never leak a stack trace to the client. */
+    /**
+     * A foreign-key {@code RESTRICT} or unique-key clash that no controller pre-checked — e.g.
+     * deleting a row other records still point at. It is the client's request that cannot be
+     * honoured, not a server fault, so it is a {@code 400} in the contract's shape rather than a 500.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleIntegrity(DataIntegrityViolationException ex) {
+        log.info("Integrity violation turned away: {}", ex.getMostSpecificCause().getMessage());
+        return ResponseEntity.badRequest()
+                .body(Map.of("detail", "This record is still in use elsewhere, so that change isn't allowed."));
+    }
+
+    /**
+     * Unreadable bodies (malformed JSON) and unconvertible parameters ({@code ?building_id=abc},
+     * {@code /api/units/abc/}) are the client's mistake — the spec's framework {@code 400}.
+     */
+    @ExceptionHandler({HttpMessageNotReadableException.class, TypeMismatchException.class})
+    public ResponseEntity<Map<String, Object>> handleUnreadable(Exception ex) {
+        return ResponseEntity.badRequest().body(Map.of("error", "Bad request"));
+    }
+
+    /** An upload over the servlet's 10 MB ceiling never reaches a controller's own size check. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleTooLarge(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.badRequest().body(Map.of("detail", "file must be 10MB or smaller"));
+    }
+
+    /**
+     * Framework-level fallback (spec §11) — never leak a stack trace to the client.
+     *
+     * <p>Spring's own exceptions for an unknown path, a wrong HTTP method or an unsupported content
+     * type already know their 4xx status; those keep it, with the spec's fallback wording. Only
+     * genuine faults become a 500.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
+        if (ex instanceof ErrorResponse framework && framework.getStatusCode().is4xxClientError()) {
+            int status = framework.getStatusCode().value();
+            return ResponseEntity.status(status).body(Map.of("error", fallbackMessage(status)));
+        }
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "An internal server error occurred"));
+    }
+
+    /** The spec §11 wording for the framework fallbacks, plus plain phrases for the rest. */
+    private static String fallbackMessage(int status) {
+        return switch (status) {
+            case 400 -> "Bad request";
+            case 403 -> "You do not have permission to access this resource";
+            case 404 -> "The requested resource was not found";
+            case 405 -> "Method not allowed";
+            case 415 -> "Unsupported media type";
+            default -> {
+                HttpStatus known = HttpStatus.resolve(status);
+                yield known == null ? "Bad request" : known.getReasonPhrase();
+            }
+        };
     }
 }

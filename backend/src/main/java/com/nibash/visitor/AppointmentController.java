@@ -26,12 +26,14 @@ import org.springframework.web.bind.annotation.*;
 public class AppointmentController {
 
     private final AppointmentRepository appointments;
+    private final VisitorRepository visitors;
     private final ResidentRepository residents;
     private final TenantService tenancy;
 
-    public AppointmentController(AppointmentRepository appointments, ResidentRepository residents,
-                                 TenantService tenancy) {
+    public AppointmentController(AppointmentRepository appointments, VisitorRepository visitors,
+                                 ResidentRepository residents, TenantService tenancy) {
         this.appointments = appointments;
+        this.visitors = visitors;
         this.residents = residents;
         this.tenancy = tenancy;
     }
@@ -100,10 +102,18 @@ public class AppointmentController {
         return update(id, body);
     }
 
+    /**
+     * Cancelling a visitor who has already been scanned in would orphan the gate record, and the
+     * schema refuses it ({@code ON DELETE RESTRICT}); say so plainly instead of failing with a 500.
+     */
     @DeleteMapping("/{id}/")
     @Transactional
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        appointments.delete(scoped(id));
+        Appointment appointment = scoped(id);
+        if (visitors.findFirstByAppointmentIdOrderByIdAsc(appointment.getId()).isPresent()) {
+            throw ApiException.badRequest("This visitor has already checked in, so the appointment can't be cancelled.");
+        }
+        appointments.delete(appointment);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 

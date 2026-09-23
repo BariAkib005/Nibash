@@ -149,6 +149,7 @@ public class TicketController {
             throw ApiException.badRequest("file is required");
         }
         storage.requireAtMost(file, MAX_IMAGE_BYTES, "file must be 5MB or smaller");
+        storage.requireType(file, StorageService.IMAGE_TYPES);
 
         TicketImage image = new TicketImage();
         image.setTicket(ticket);

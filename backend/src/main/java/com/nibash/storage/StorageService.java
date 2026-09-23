@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -63,6 +64,42 @@ public class StorageService {
         if (file != null && file.getSize() > maxBytes) {
             throw ApiException.badRequest(message);
         }
+    }
+
+    /** Photos: ticket images, and the image half of receipts. */
+    public static final Set<String> IMAGE_TYPES = Set.of("jpg", "jpeg", "png", "gif", "webp", "heic");
+
+    /** Receipts are photographed or scanned. */
+    public static final Set<String> RECEIPT_TYPES = union(IMAGE_TYPES, Set.of("pdf"));
+
+    /** The document repository: office formats, PDFs, plain text and images. */
+    public static final Set<String> DOCUMENT_TYPES = union(IMAGE_TYPES, Set.of(
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "txt", "csv", "rtf"));
+
+    /**
+     * Rejects a file whose extension is not in {@code allowed}.
+     *
+     * <p>Uploads are served back from this app's own origin under {@code /media/}, so an
+     * {@code .html} or {@code .svg} "photo" would run script in every viewer's session. The
+     * allowlist is the first line of defence; the media handler's {@code nosniff} and
+     * {@code Content-Security-Policy} headers are the second.
+     */
+    public void requireType(MultipartFile file, Set<String> allowed) {
+        if (file == null || file.isEmpty()) {
+            return;
+        }
+        String name = sanitize(file.getOriginalFilename());
+        int dot = name.lastIndexOf('.');
+        String extension = dot > 0 ? name.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
+        if (!allowed.contains(extension)) {
+            throw ApiException.badRequest("Unsupported file type. Allowed: " + String.join(", ", new java.util.TreeSet<>(allowed)) + ".");
+        }
+    }
+
+    private static Set<String> union(Set<String> a, Set<String> b) {
+        Set<String> all = new java.util.HashSet<>(a);
+        all.addAll(b);
+        return Set.copyOf(all);
     }
 
     public Path resolve(String relativePath) {
