@@ -1,0 +1,8 @@
+target/
+media/
+build/
+.env
+*.env
+*.iml
+.idea/
+HELP.md
