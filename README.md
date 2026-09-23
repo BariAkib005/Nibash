@@ -14,7 +14,8 @@ Built for the Bangladeshi market — currency **BDT**, timezone **Asia/Dhaka**, 
 | Backend | Java 26 · Spring Boot 4.1 · Spring Web MVC / Data JPA / Security / Validation / WebSocket / Mail |
 | Database | MySQL 8 · **Flyway** migrations (`backend/src/main/resources/db/migration`) |
 | Frontend | React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · React Router 7 · TanStack Query 5 |
-| Infra | Docker Compose · Nginx · Azure VM · GitHub Actions |
+| Realtime | Spring WebSocket (`TextWebSocketHandler`) at `/ws/chat/{roomId}/`, token-checked at the handshake |
+| Infra | Docker Compose · Nginx · GitHub Actions CI (build + test) — cloud deployment (Azure VM, HTTPS, Blob storage, CD) is **not done yet** |
 
 > **Note on versions.** The spec was written against "Java 21 / Spring Boot 3.3".
 > Spring Initializr no longer offers Boot 3.x, so the project runs **Boot 4.1 on Java 26** (the JDK
@@ -38,10 +39,17 @@ These have already bitten once and will bite again, so they're recorded here:
 
 ```
 Nibash/
-├── backend/          Spring Boot API (Maven wrapper included — no local Maven needed)
+├── backend/              Spring Boot API (Maven wrapper included — no local Maven needed)
+│   ├── Dockerfile        multi-stage: JDK 26 build → JRE 26 runtime, non-root
 │   └── src/main/resources/db/migration/V1__baseline.sql   ← the full 57-table schema
-├── frontend/         React SPA (landing page, auth, app shell)
-└── db/setup.sql      One-time local database + app-user creation
+├── frontend/             React SPA
+│   ├── Dockerfile        Node build → Nginx
+│   └── nginx.conf        serves the build, proxies /api, /media and /ws (with the upgrade headers)
+├── docker-compose.yml    MySQL + API + Nginx, one command
+├── scripts/              db-backup.sh / db-restore.sh
+├── .github/workflows/    CI: backend tests on MySQL, frontend lint + build, both images build
+├── db/setup.sql          One-time local database + app-user creation
+└── docs/DEMO.md          The five demo journeys, click by click
 ```
 
 ---
@@ -54,7 +62,8 @@ Nibash/
 ### 1. Create the database *(once, needs MySQL admin rights)*
 
 ```bash
-mysql -u root -p < db/setup.sql
+mysql -u root -p < db/setup.sql                  # bash / zsh
+Get-Content db\setup.sql | mysql -u root -p      # PowerShell — it has no "<" redirection
 ```
 
 Or open `db/setup.sql` in MySQL Workbench and execute it. It creates:
@@ -95,6 +104,20 @@ npm run dev
 Serves on **http://127.0.0.1:5173** and proxies `/api`, `/media` and `/ws` to the backend, so there
 is no CORS in development and no absolute API URL in the app code.
 
+### Or: run the whole stack in Docker
+
+Needs only Docker (Desktop) — no JDK, Node or MySQL on the machine.
+
+```bash
+cp .env.example .env            # set MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD; NIBASH_SEED=true for demo data
+docker compose up -d --build    # first build downloads Maven and npm dependencies — a few minutes
+```
+
+Open **http://localhost:8080**. Three containers: `mysql` (data on a named volume), `backend` (uploads
+on a named volume, `/actuator/health` probe) and `web` (Nginx serving the build and proxying `/api`,
+`/media` and the `/ws` chat socket with its `Upgrade` headers). `docker compose down` stops them and
+keeps the data; `docker compose down -v` also deletes it.
+
 ---
 
 ## What works today
@@ -127,6 +150,34 @@ a notification
 per resident and live result bars · events with RSVP · a drag-to-select booking calendar that
 checks for clashes *before* you submit
 
+**Chat** — rooms per building, messages over REST with live delivery on a WebSocket (typing
+indicators, auto-reconnect), a notification for every other member, private rooms readable only by
+members and the committee
+
+**Facilities** — parking grid you click to assign or release a vehicle, with a layout generator ·
+lift status board anyone can report on · equipment with warranty warnings (expired / within 60 days)
+· service schedule · a waste calendar whose recurring collections roll forward
+
+**Documents** — upload, version chains (a new version retires the old one), downloads that write an
+audit row, the audit trail per document, ACL grants stored per user and role
+
+**Vendors & rentals** — vendor catalogue with residents' reviews and a Haversine *nearby* search ·
+flat listings with request → approve/decline → contract · a rent guide from the ML estimator's
+cached figures
+
+**Utilities** — meters per unit, readings, opening a billing month; pending bills join the next
+monthly invoice once and are settled with it
+
+**My shift** — staff and guards check themselves in and out from a phone (idempotent check-in)
+
+**Safety & platform** — emergency numbers, the intercom log (with a hardware webhook), access cards ·
+a multi-building **Portfolio** · an **Activity** log of billing runs, payments and document changes ·
+`GET /api/dashboard/summary/`, the single call returning all 8 metrics and 32 sections
+
+**Jobs** — at 00:05 Asia/Dhaka past-due invoices become *overdue*; at 08:00 every invoice due by
+tomorrow gets an email reminder. The invoice *Remind* button sends the same email and an in-app
+notification.
+
 ### Verify the journeys
 
 ```bash
@@ -140,6 +191,12 @@ Sign in as `admin1@nibash.bd` / `Nibash@2026` (every demo account shares that pa
 - **Maintenance** — Maintenance → drag a card between columns → open one → attach a photo
 - **Security** — Expected visitors → *Expect a visitor* → show the pass → sign in as `guard1@nibash.bd` → Gate scan → type the code → checked in
 - **Community** — Polls → vote once, then try again → *Already voted* · Bookings → drag two hours → book → drag an overlapping slot → refused before submit
+- **Chat** — open Chat as `resident1` in one browser and `committee1` in another (a private window) → type in *General* → the other window shows "Ayesha Rahman is typing…" and then the message, live
+- **Parking** — Parking → click a free bay → pick a vehicle → *Assign bay* → the bay turns occupied; click it again → *Release*
+- **Documents** — Documents → *History* on the bylaws → download it → the audit trail gains a *download* row
+- **Vendors** — Vendors → *Find someone nearby* → Plumbing within 5 km lists one plumber; widen to 10 km and the Mirpur plumber appears, further away
+
+The step-by-step demo script for all five role journeys is in **[docs/DEMO.md](docs/DEMO.md)**.
 
 ### Demo accounts
 
@@ -179,10 +236,14 @@ cd backend
 ./mvnw test
 ```
 
-38 integration tests against a live MySQL schema, covering the rules that must never regress:
+64 integration tests against a live MySQL schema, covering the rules that must never regress. CI runs
+the same suite on every push (`.github/workflows/ci.yml`).
 
 | Suite | What it pins down |
 | --- | --- |
+| `FacilitiesModulesTest` | nearby search honours the radius, nearest first · reviews are filed as the caller · only back-office manages global vendors · a download writes **exactly one** audit row · version chains cannot fork · non-allowlisted uploads rejected, media served with `nosniff` + sandbox CSP · chat notifies every *other* member, private rooms stay private · parking layout clamps and is idempotent, a bay never holds two vehicles · a utility bill is invoiced **once** and settled with its invoice · a gate pass only opens on its day, a checked-in visitor can't be cancelled · lift status keeps the latest per lift · recurring waste rolls forward · rentals: only the lister decides, contracts need approval · public ML estimate (200 hit / 202 miss) and intercom webhook · overview intersects buildings · client mistakes are 4xx, not 500 · expenses can be recorded from the multipart form |
+| `DashboardAndJobsTest` | every seeded role hydrates the full dashboard (8 metrics, 32 sections) · privacy gating inside the summary · foreign building falls back silently · **the summary's SQL statement count stays flat as rows are added** (no N+1) · the overdue sweep and reminders pick the right invoices and survive a rejected address · *Remind* leaves an in-app notification |
+| `ChatSocketTest` | on a real server: **two WebSocket clients in one room both receive a persisted message** · the server, not the client, sets the sender · bad tokens and non-members of a private room are refused at the handshake |
 | `AuthFlowTest` | signup → login → me → logout, plus duplicate email, weak password, bad login, missing token |
 | `TenancyTest` | cross-building reads blocked, role gating, directory privacy, seeder idempotency |
 | `FinanceAndMaintenanceTest` | monthly batch creates nothing on a re-run · paid invoice rejected · **two concurrent checkouts write exactly one payment** · expense date/amount rules · idempotent check-in · ticket auto-assignment |
@@ -219,7 +280,107 @@ envelope `{count, next, previous, results}` at 20 per page.
 | `/api/bookings/` + `/quote/` | Token | Overlap rejection under a lock; `quote/` previews it |
 | `/api/emergency-contacts/` `/access-cards/` | Committee/Admin | Plain CRUD |
 | `/api/settings/` `/api/seed/` | Token / back-office | Profile, password, building settings; demo seeder |
+| `/api/dashboard/summary/` | Token | 8 metrics + 32 sections in one call; foreign `building_id` falls back to your own |
+| `/api/analytics/overview` | Token | Multi-building KPIs (+ `per_building`); `?building_ids[]=` intersected with yours |
+| `/api/services/` `/vendors/` + `/nearby/` `/reviews/` | mixed | Nearby = Haversine, radius, nearest first; reviews keep the vendor's average |
+| `/api/chat/rooms/` `/members/` `/messages/` + `/summary/` | Token | `?room_id= search= latest=`; a message notifies every other member |
+| `ws://…/ws/chat/{roomId}/?token=` | Token (handshake) | Pushes `message.created` for every saved message; `typing` frames |
+| `/api/documents/` + `/{id}/download/` `/audit/` `/versions/` | Committee/Admin | Multipart upload; download writes an audit row |
+| `/api/document-acl-users/` `/document-acl-roles/` `/document-audit/` | mixed | ACL grants (stored, not enforced — see below); read-only audit |
+| `/api/parking/slots/` `/layout/` · `/api/vehicles/` | mixed | Layout generator clamps 1–12; assignment keeps slot status in step |
+| `/api/assets/` `/asset-maintenance/` · `/api/lifts/status/` `/current/` | mixed | `warranty_state` on assets; latest status per lift |
+| `/api/utility-meters/` `/utility-bills/` + `/generate/` | Committee/Admin | `generate/` is idempotent per month |
+| `/api/waste-schedules/` + `/next/` | Committee/Admin | `next_occurrence` rolls recurring schedules forward |
+| `/api/listings/` `/rental-requests/` `/contracts/` | Token | pending → approved/rejected; contracts on approved requests only |
+| `/api/ml/models/` `/training-runs/` `/city-cache/` · `POST /api/ml/price-estimate` | Committee/Admin · **public** | Estimate: 200 on a cache hit, 202 with `estimate: null` on a miss |
+| `/api/intercom/devices/` `/logs/` · `POST /api/intercom/webhook` | mixed · **public** | Webhook can require `X-Intercom-Secret` |
+| `/api/activity-logs/` | Committee/Admin (strict) | Read-only; scoped to people attached to your buildings |
 
 ---
 
+## Configuration
 
+Every setting comes from the environment — `backend/.env` when running with `./mvnw`, the root
+`.env` for Docker Compose. Nothing secret is in `application.yml`.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `MYSQL_HOST` `MYSQL_PORT` `MYSQL_DATABASE` `MYSQL_USER` `MYSQL_PASSWORD` | `localhost` `3306` `nibash` `nibash` — | Database connection |
+| `SERVER_PORT` | `8000` | API port |
+| `NIBASH_MEDIA_DIR` | `./media` | Where uploads are stored (a volume in Docker) |
+| `NIBASH_CORS_ORIGINS` | the Vite dev server | Only matters when the browser calls the API cross-origin |
+| `NIBASH_SEED` | `false` | `true` runs the idempotent demo seeder at startup (same as `--seed`) |
+| `NIBASH_JOBS_ENABLED` | `true` | The 00:05 overdue sweep and 08:00 reminders |
+| `NIBASH_INTERCOM_WEBHOOK_SECRET` | empty | When set, `POST /api/intercom/webhook` needs it in `X-Intercom-Secret` |
+| `NIBASH_MAIL_FROM` `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASSWORD` `SMTP_AUTH` `SMTP_TLS` | no-ops without a server | Reminder email; a missing server is logged, never fatal |
+
+## Background jobs
+
+Both run on **Asia/Dhaka** time and can be switched off with `NIBASH_JOBS_ENABLED=false`.
+
+| When | Job | Rule |
+| --- | --- | --- |
+| 00:05 daily | Overdue sweep | `pending` invoices whose due date has passed become `overdue` |
+| 08:00 daily | Invoice reminders | every `pending` or `overdue` invoice due by tomorrow gets `Reminder: Invoice {number} due {date}`; a rejected address is logged and the batch carries on |
+
+## Backups and restore
+
+```bash
+scripts/db-backup.sh                 # local MySQL (credentials from backend/.env) → backups/nibash-<time>.sql.gz
+scripts/db-backup.sh --docker        # the compose `mysql` container
+scripts/db-restore.sh backups/<file>.sql.gz --yes            # DESTRUCTIVE — replaces the tables in the target DB
+scripts/db-restore.sh backups/<file>.sql.gz --docker --yes
+```
+
+- Dumps are consistent snapshots (`--single-transaction`) taken without locking the app out, gzip'd,
+  and checked for mysqldump's completion marker; the newest 14 are kept (`KEEP=`).
+- On Windows run them from Git Bash, with `MYSQL_BIN_DIR="/c/Program Files/MySQL/MySQL Server 8.0/bin"`
+  if the MySQL client isn't on `PATH`.
+- Passwords go through `MYSQL_PWD`, never the command line. `backups/` is gitignored — backups hold real data.
+- **Tested:** the dev database was backed up and restored into a fresh container database; all 58
+  tables matched row for row. Restart the API after a restore.
+- For a daily backup, schedule `scripts/db-backup.sh --docker` with cron or Task Scheduler.
+
+## Security notes
+
+- **Tenancy** everywhere: a row outside your buildings is a `404`, including in custom actions.
+- **Uploads** are limited by type (images for ticket photos; images and PDFs for receipts; office
+  documents, PDFs, text and images for documents) and size, and served with
+  `X-Content-Type-Options: nosniff` and a `sandbox` Content-Security-Policy, so an uploaded file can
+  be displayed but never run script on this origin.
+- **The chat socket** validates the session token during the handshake and applies the same room
+  rules as the REST API; the server sets each message's sender.
+- **Errors** never leak a stack trace; client mistakes are `4xx` with the spec's wording.
+- Passwords are BCrypt; password hashes, dates of birth and national IDs are never serialized.
+
+## Deviations from the spec
+
+Deliberate, and each covered by a test:
+
+| Area | Spec | Here | Why |
+| --- | --- | --- | --- |
+| Gate passes | expire only once their date is past | valid **only on** their date | a pass for next week opened the gate today, contradicting the pass's own wording |
+| Utility bills | `generate-monthly` adds pending bills | bills go `pending → billed → paid` | otherwise one bill was charged again every month |
+| Private chat rooms | not enforced | readable only by members and managers | "private" was otherwise a label |
+| Chat socket | unauthenticated echo | token-checked handshake; persisted messages pushed as `message.created` | spec §15.9 sanctions it; nobody can listen to a room they can't read |
+| Room rename/delete | any member | managers only | a resident could delete *General* |
+| Global vendors | any committee | back-office only | one building could rewrite every building's catalogue |
+| Reviews | plain CRUD | filed as the caller; vendor rating = average of reviews | same anti-spoofing as poll votes |
+| Waste `next/` | earliest `schedule_time ≥ now` | recurring schedules roll forward (`next_occurrence`) | a weekly schedule vanished after its first date |
+| Overdue invoices | nothing flips them | daily sweep (spec §15.10 sanctions it) | overdue invoices still get reminders |
+| Invoice *Remind* | stub | sends the reminder email + an in-app notification | same response contract |
+| Utility `generate/` | creates duplicates on re-run | idempotent per month | matches `generate-monthly` |
+| Intercom webhook | AllowAny | optional shared secret | off unless configured, so behaviour is unchanged by default |
+| Activity logs | no public route | read-only route for managers, scoped to their people | the table has no building column |
+| Document ACLs | stored, not enforced | unchanged — **still not enforced on reads** | kept for parity (spec §15.6); enforcing them is the natural next step |
+| Health probe | — | `/actuator/health` (only `health` exposed) | container health checks |
+
+## Not done yet
+
+- **Cloud deployment** — Azure VM, HTTPS with Let's Encrypt, secrets on the server, Azure Blob Storage
+  behind `StorageService`, and a deploy step in CI. Everything up to that point is in place: the images,
+  `docker-compose.yml`, the Nginx config (including the WebSocket upgrade) and the backup scripts.
+- Document ACLs are stored but not enforced on reads (see above).
+- The *Overview* page is the redesigned one and shows its own set of cards; `GET /api/dashboard/summary/`
+  already returns every section should more widgets be added to it.
+- i18n: English UI with Bangla demo data, per the plan's cut list.

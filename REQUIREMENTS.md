@@ -32,14 +32,27 @@ build.
 - **Spring Boot, Hibernate, Flyway, Jackson, the MySQL driver** — Maven fetches all nine starters into
   `~/.m2` on the first build.
 - **React, Vite, TypeScript, Tailwind** — `npm install` fetches these into `frontend/node_modules`.
-- **Docker, Docker Compose, Nginx** — the README's stack table mentions them as the deployment target, but
-  there are **no Dockerfiles, compose files, or nginx configs in this repository**. There is no container
-  path yet; run the two processes directly.
+- **Nginx** — only the Docker path uses it, and it ships inside the `web` image.
 - **A MySQL command-line client** — only needed if you want to run `db/setup.sql` from a terminal. MySQL
   Workbench, DBeaver, or any GUI does the same job.
 
 > **The first build needs internet.** The Maven wrapper downloads Maven and ~9 starters, and `npm install`
 > downloads the frontend tree. After that both work offline.
+
+---
+
+## Alternative: Docker only
+
+If you would rather not install a JDK, Node and MySQL, **Docker Desktop** (Windows/macOS) or Docker
+Engine with the Compose plugin (Linux) is the only requirement — the images carry everything else:
+
+```bash
+cp .env.example .env            # set the two MySQL passwords; NIBASH_SEED=true for demo data
+docker compose up -d --build    # → http://localhost:8080
+```
+
+Verified with Docker 29.7 and Compose v5.4. The first build needs internet (Maven and npm dependencies,
+base images) and takes a few minutes; later builds reuse the cache.
 
 ---
 
