@@ -94,8 +94,8 @@ export default function Login() {
         </Button>
       </form>
 
-      <div className="mt-8 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Demo accounts</p>
+      <details className="mt-7 rounded-md border border-slate-200 bg-slate-50/70 p-4">
+        <summary className="text-xs font-medium text-slate-600">Explore with a demo account</summary>
         <div className="mt-3 flex flex-wrap gap-2">
           {DEMO_ACCOUNTS.map((account) => (
             <button
@@ -108,7 +108,7 @@ export default function Login() {
             </button>
           ))}
         </div>
-      </div>
+      </details>
     </AuthLayout>
   )
 }

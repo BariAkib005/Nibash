@@ -3,12 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useBuilding } from '../lib/building'
 import { formatDateTime } from '../lib/format'
+import Icon from './Icon'
+import type { IconName } from './Icon'
 
-const TYPE_ICON: Record<string, string> = {
-  sos: '🚨',
-  chat: '💬',
-  invoice: '🧾',
-  booking: '🏛️',
+const TYPE_ICON: Record<string, IconName> = {
+  sos: 'alert',
+  chat: 'notice',
+  invoice: 'receipt',
+  booking: 'calendar',
 }
 
 /**
@@ -73,7 +75,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         className="relative grid h-9 w-9 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100"
       >
-        <span aria-hidden="true" className="text-lg">🔔</span>
+        <Icon name="bell" />
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 grid min-w-4.5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
             {unread > 99 ? '99+' : unread}
@@ -109,7 +111,7 @@ export default function NotificationBell() {
                       hover:bg-slate-50 ${notification.is_read ? '' : 'bg-brand-50/50'}`}
                   >
                     <span aria-hidden="true" className="text-base">
-                      {TYPE_ICON[notification.type] ?? '🔔'}
+                      <Icon name={TYPE_ICON[notification.type] ?? 'bell'} size={18} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className={`block text-sm ${notification.is_read ? 'text-slate-600' : 'font-medium text-slate-900'}`}>

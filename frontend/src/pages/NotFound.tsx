@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Button, Logo } from '../components/ui'
+import { Logo } from '../components/ui'
+import Icon from '../components/Icon'
 
 export default function NotFound() {
   return (
@@ -8,11 +9,10 @@ export default function NotFound() {
       <p className="mt-8 text-sm font-bold uppercase tracking-widest text-brand-700">404</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Page not found</h1>
       <p className="mt-2 max-w-sm text-slate-600">
-        That page doesn't exist — it may have moved, or it may be part of a module arriving in a
-        later week of the build.
+        We couldn’t find that page. Head back home to find your way to your building.
       </p>
-      <Link to="/" className="mt-8">
-        <Button>Back to home</Button>
+      <Link to="/" className="action-link mt-8">
+        Back to home <Icon name="arrow" size={16} />
       </Link>
     </div>
   )

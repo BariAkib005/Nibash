@@ -5,7 +5,8 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
-import { useEffect, useId } from 'react'
+import { useEffect, useId, useRef } from 'react'
+import Icon from './Icon'
 
 /* Small primitives shared across pages. Week 2 grows these into DataTable/FormModal/etc. */
 
@@ -15,9 +16,16 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode
 }
 
-export function Button({ variant = 'primary', loading, children, className = '', disabled, ...rest }: ButtonProps) {
+export function Button({
+  variant = 'primary',
+  loading,
+  children,
+  className = '',
+  disabled,
+  ...rest
+}: ButtonProps) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ' +
+    'ui-button inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ' +
     'transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ' +
     'disabled:cursor-not-allowed disabled:opacity-60'
 
@@ -80,17 +88,18 @@ export function Field({ label, error, hint, className = '', ...rest }: FieldProp
 /** Non-field errors (bad credentials, duplicate email) surfaced above the form. */
 export function Alert({ children }: { children: ReactNode }) {
   return (
-    <div role="alert" className="flex gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
-      <span aria-hidden="true">⚠</span>
+    <div
+      role="alert"
+      className="flex gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+    >
+      <Icon name="alert" size={18} className="shrink-0" />
       <span>{children}</span>
     </div>
   )
 }
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>{children}</div>
-  )
+  return <div className={`ui-card ${className}`}>{children}</div>
 }
 
 export function Skeleton({ className = '' }: { className?: string }) {
@@ -98,7 +107,11 @@ export function Skeleton({ className = '' }: { className?: string }) {
 }
 
 /** Designed empty state with a call to action — every list gets one (plan §0.5). */
-export function EmptyState({ icon, title, body, action }: {
+export function EmptyState({
+  title,
+  body,
+  action,
+}: {
   icon: string
   title: string
   body: string
@@ -106,7 +119,9 @@ export function EmptyState({ icon, title, body, action }: {
 }) {
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-6 py-12 text-center">
-      <span className="text-3xl" aria-hidden="true">{icon}</span>
+      <span className="grid h-12 w-12 place-items-center rounded-full bg-brand-100 text-brand-700">
+        <Icon name="box" size={24} />
+      </span>
       <h3 className="mt-3 text-base font-semibold text-slate-800">{title}</h3>
       <p className="mt-1 max-w-md text-sm text-slate-600">{body}</p>
       {action && <div className="mt-4">{action}</div>}
@@ -114,18 +129,22 @@ export function EmptyState({ icon, title, body, action }: {
   )
 }
 
-/** Nibash wordmark — the teal N tile plus the name. */
+/** Architectural monogram and wordmark shared by all layouts. */
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-700 text-sm font-bold text-white">
-        N
+    <span className="brand-logo">
+      <span className="brand-mark">
+        <svg width="33" height="36" viewBox="0 0 33 36" fill="none" aria-hidden="true">
+          <path
+            d="M3 32V10L13 4v28M13 4l17 10v18M13 14l8 5v13M3 32h27"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinejoin="round"
+          />
+          <path d="M7 13v3m0 4v3m10-12v3m9 4v3m0 4v3" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
       </span>
-      {!compact && (
-        <span className="text-lg font-bold tracking-tight text-slate-900">
-          Nibash
-        </span>
-      )}
+      {!compact && <span className="brand-word">Nibash</span>}
     </span>
   )
 }
@@ -153,7 +172,11 @@ export function Select({ label, error, children, className = '', ...rest }: Sele
       >
         {children}
       </select>
-      {error && <p role="alert" className="text-xs font-medium text-red-600">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs font-medium text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
@@ -179,30 +202,78 @@ export function TextArea({ label, error, className = '', ...rest }: TextAreaProp
           ${error ? 'border-red-400' : 'border-slate-300 focus:border-brand-600'} ${className}`}
         {...rest}
       />
-      {error && <p role="alert" className="text-xs font-medium text-red-600">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs font-medium text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
 
-/**
- * Dialog used by every "create" flow. Closes on Escape and on backdrop click, and traps nothing —
- * the forms inside are short, so native focus order is enough.
- */
-export function Modal({ open, title, onClose, children, footer }: {
+/** Shared dialog with keyboard focus containment and focus restoration. */
+export function Modal({
+  open,
+  title,
+  onClose,
+  children,
+  footer,
+}: {
   open: boolean
   title: string
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  useEffect(() => {
+    closeRef.current = onClose
+  }, [onClose])
   useEffect(() => {
     if (!open) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const focusable = () =>
+      Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0)
+    const initial = dialogRef.current?.querySelector<HTMLElement>(
+      'input:not(:disabled), select:not(:disabled), textarea:not(:disabled)',
+    )
+    ;(initial ?? focusable()[0] ?? dialogRef.current)?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        closeRef.current()
+      }
+      if (e.key === 'Tab') {
+        const elements = focusable()
+        const first = elements[0]
+        const last = elements[elements.length - 1]
+        if (!first) {
+          e.preventDefault()
+          return
+        }
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
+  }, [open])
 
   if (!open) return null
 
@@ -215,6 +286,8 @@ export function Modal({ open, title, onClose, children, footer }: {
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}

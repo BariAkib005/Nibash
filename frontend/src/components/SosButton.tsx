@@ -5,6 +5,7 @@ import { useBuilding } from '../lib/building'
 import { useCurrentResident } from '../lib/resident'
 import { useToast } from '../lib/toast'
 import { Button, Modal } from './ui'
+import Icon from './Icon'
 
 /** Long enough that a pocket-press cannot trigger it, short enough to be usable in a real panic. */
 const HOLD_MS = 1500
@@ -86,7 +87,7 @@ export default function SosButton() {
         className="grid h-9 w-9 place-items-center rounded-lg text-lg transition hover:bg-red-50"
         title="Emergency SOS"
       >
-        <span aria-hidden="true">🆘</span>
+        <Icon name="alert" size={19} className="text-red-700" />
       </button>
 
       <Modal

@@ -54,7 +54,7 @@ export default function DataTable<T>({
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="data-table overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
