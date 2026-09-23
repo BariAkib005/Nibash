@@ -10,6 +10,10 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate.default_batch_fetch_size: 50
+      # Lets the dashboard test count the SQL statements one request issues (the no-N+1 check).
+      hibernate.generate_statistics: true
 
   flyway:
     enabled: true
@@ -22,5 +26,9 @@ spring:
 nibash:
   timezone: Asia/Dhaka
   media-dir: ./build/test-media
+  jobs:
+    enabled: false        # the suite calls the jobs directly; never let the scheduler fire mid-run
+  intercom:
+    webhook-secret: ""
   cors:
     allowed-origins: http://127.0.0.1:5173
