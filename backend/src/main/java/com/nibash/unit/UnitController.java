@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/units")
 public class UnitController {
 
+    static final int MAX_PAGE_SIZE = 500;
+
     private static final List<String> STATUSES = List.of("available", "occupied", "sold", "rented");
     private static final List<String> TYPES =
             List.of("studio", "1BHK", "2BHK", "3BHK", "duplex", "shop", "office");
@@ -42,12 +44,15 @@ public class UnitController {
     @Transactional(readOnly = true)
     public PageEnvelope<UnitDto> list(@RequestParam(defaultValue = "1") int page,
                                       @RequestParam(name = "building_id", required = false) Long buildingId,
-                                      @RequestParam(required = false) String status) {
+                                      @RequestParam(required = false) String status,
+                                      @RequestParam(name = "page_size", required = false) Integer pageSize) {
         List<Long> scope = tenancy.resolveScope(CurrentUser.require(), buildingId);
         if (scope.isEmpty()) {
             return new PageEnvelope<>(0, null, null, List.of());
         }
-        var pageable = PageRequest.of(Math.max(page - 1, 0), PageEnvelope.PAGE_SIZE,
+        // Pickers ask for every unit of a building at once rather than paging through a dropdown.
+        int size = pageSize == null ? PageEnvelope.PAGE_SIZE : Math.clamp(pageSize, 1, MAX_PAGE_SIZE);
+        var pageable = PageRequest.of(Math.max(page - 1, 0), size,
                 Sort.by("building.id").and(Sort.by("unitNumber")));
 
         var result = status == null || status.isBlank()

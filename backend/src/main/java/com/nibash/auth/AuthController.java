@@ -31,6 +31,11 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.signup(request));
     }
 
+    @PostMapping("/signup/renter/")
+    public ResponseEntity<AuthResponse> signupRenter(@Valid @RequestBody RenterSignupRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.signupRenter(request));
+    }
+
     @PostMapping("/logout/")
     public Map<String, String> logout() {
         authService.logout(CurrentUser.require());

@@ -452,12 +452,18 @@ public class FacilitiesSeeder {
     // ------------------------------------------------------------------ rentals (spec §14.12)
 
     private int seedRentals(Building gulshan, Resident lister, Resident requester) {
+        return seedNeighbourRental(gulshan, lister, requester) + seedPublicRental(gulshan, lister.getUser());
+    }
+
+    /** A resident's flat, offered inside the building, with a neighbour's request waiting. */
+    private int seedNeighbourRental(Building gulshan, Resident lister, Resident requester) {
         String title = "Bright 2BHK on floor 3 — 03A";
         if (listings.findFirstByBuildingIdAndTitle(gulshan.getId(), title).isPresent()) {
             return 0;
         }
         Listing listing = new Listing();
         listing.setResident(lister);
+        listing.setListedBy(lister.getUser());
         listing.setBuilding(gulshan);
         listing.setUnit(units.findByBuildingIdAndUnitNumber(gulshan.getId(), "03A").orElse(null));
         listing.setTitle(title);
@@ -469,10 +475,31 @@ public class FacilitiesSeeder {
 
         RentalRequest request = new RentalRequest();
         request.setListing(listing);
+        request.setApplicant(requester.getUser());
         request.setTenant(requester);
         request.setStatus(RentalRequest.PENDING);
         rentalRequests.save(request);
         return 2;
+    }
+
+    /** A vacant flat the building lets itself, published on the public flats page for outsiders. */
+    private int seedPublicRental(Building gulshan, User manager) {
+        String title = "Sunny top-floor 3BHK — 06B";
+        if (listings.findFirstByBuildingIdAndTitle(gulshan.getId(), title).isPresent()) {
+            return 0;
+        }
+        Listing listing = new Listing();
+        listing.setListedBy(manager);
+        listing.setBuilding(gulshan);
+        listing.setUnit(units.findByBuildingIdAndUnitNumber(gulshan.getId(), "06B").orElse(null));
+        listing.setTitle(title);
+        listing.setDescription("Top-floor 3BHK, 1,650 sq ft, three balconies with lake views, lift and "
+                + "generator backup, 24-hour security. Rooftop lounge and gym in the building.");
+        listing.setRent(new BigDecimal("85000.00"));
+        listing.setAvailableFrom(LocalDate.now().plusMonths(1).withDayOfMonth(1));
+        listing.setPublicListing(true);
+        listings.save(listing);
+        return 1;
     }
 
     // ------------------------------------------------------------------ utilities (spec §14.12)

@@ -29,6 +29,14 @@ public final class AuthDtos {
             List<String> modules) {
     }
 
+    /** Someone looking for a flat: an account with no building until a rental request is approved. */
+    public record RenterSignupRequest(
+            @NotBlank(message = "Name is required.") String name,
+            @NotBlank(message = "Email is required.") @Email(message = "Enter a valid email address.") String email,
+            @NotBlank(message = "Password is required.") String password,
+            String phone) {
+    }
+
     /** The caller's profile. Password hash, DOB and national ID are never included (spec §4.1). */
     public record UserDto(Long id, String name, String email, String phone, String role, String avatarPath) {
 

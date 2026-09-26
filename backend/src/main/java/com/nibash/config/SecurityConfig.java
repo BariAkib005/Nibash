@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -56,7 +57,10 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
                         // AllowAny endpoints (spec §5)
-                        .requestMatchers("/api/auth/login/", "/api/auth/signup/").permitAll()
+                        .requestMatchers("/api/auth/login/", "/api/auth/signup/", "/api/auth/signup/renter/").permitAll()
+                        // Invitees have no account yet; the public flats page is for people outside any building.
+                        .requestMatchers("/api/invitations/preview/", "/api/invitations/accept/").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .requestMatchers("/api/intercom/webhook", "/api/ml/price-estimate").permitAll()
                         .requestMatchers("/media/**", "/actuator/health").permitAll()
                         .requestMatchers("/ws/**").permitAll()

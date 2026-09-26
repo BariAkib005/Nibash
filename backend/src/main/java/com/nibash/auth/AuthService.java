@@ -104,6 +104,31 @@ public class AuthService {
         return new AuthResponse(tokens.getOrCreate(user), UserDto.from(user), BuildingDto.from(building));
     }
 
+    /**
+     * An account for someone applying for a flat. It belongs to no building — tenancy gives it
+     * nothing — until the committee approves a request, which makes it a resident there.
+     */
+    @Transactional
+    public AuthResponse signupRenter(RenterSignupRequest request) {
+        if (users.existsByEmailIgnoreCase(request.email())) {
+            throw ApiException.badRequest("An account with this email already exists. Sign in instead.");
+        }
+        passwordPolicy.validate(request.password(), request.email(), request.name());
+        String phone = request.phone() == null ? "" : request.phone().trim();
+        if (phone.length() > 20) {
+            throw ApiException.badRequest("phone must be at most 20 characters.");
+        }
+
+        User user = new User();
+        user.setName(request.name().trim());
+        user.setEmail(request.email().trim());
+        user.setPhone(phone);
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRole(Roles.RESIDENT);
+        user = users.save(user);
+        return new AuthResponse(tokens.getOrCreate(user), UserDto.from(user), null);
+    }
+
     @Transactional(readOnly = true)
     public SessionResponse me(User user) {
         return new SessionResponse(UserDto.from(user), BuildingDto.from(homeBuilding(user).orElse(null)));
@@ -117,6 +142,9 @@ public class AuthService {
     /**
      * "First building for user" (spec §4.2): resident row → staff row → developer/primary contact →
      * first building in the system (back-office convenience) → none.
+     *
+     * <p>The last step is for back-office accounts only: anyone else with no membership — a renter
+     * waiting on a request — gets no building rather than the name of one they cannot open.
      */
     @Transactional(readOnly = true)
     public Optional<Building> homeBuilding(User user) {
@@ -134,7 +162,7 @@ public class AuthService {
         if (!owned.isEmpty()) {
             return Optional.of(owned.getFirst());
         }
-        return buildings.findFirstByOrderByIdAsc();
+        return user.isBackOffice() ? buildings.findFirstByOrderByIdAsc() : Optional.empty();
     }
 
     private String writeJson(Object value) {

@@ -47,7 +47,7 @@ public class ContractController {
 
         public static ContractDto from(Contract c) {
             return new ContractDto(c.getId(), c.getRequest().getId(), c.getContractPath(), c.getSignedAt(),
-                    c.getRequest().getListing().getTitle(), c.getRequest().getTenant().getUser().getName());
+                    c.getRequest().getListing().getTitle(), c.getRequest().getApplicant().getName());
         }
     }
 
@@ -90,7 +90,7 @@ public class ContractController {
         RentalRequest request = requests.findByIdAndListingBuildingIdIn(Body.requireLong(body, "request"),
                         tenancy.allowedBuildingIds(caller))
                 .orElseThrow(() -> ApiException.notFound("Not found."));
-        boolean lister = request.getListing().getResident().getUser().getId().equals(caller.getId());
+        boolean lister = request.getListing().isListedBy(caller);
         if (!lister && !caller.isBackOffice() && !caller.isAdminOrCommittee()) {
             throw ApiException.forbidden("Only the person who listed the unit can file its contract.");
         }

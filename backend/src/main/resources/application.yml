@@ -55,6 +55,8 @@ spring:
       mail.smtp.writetimeout: 5000
 
 nibash:
+  # Where people open the app — the base of the links in invitation and rental emails.
+  app-url: ${NIBASH_APP_URL:http://127.0.0.1:5173}
   timezone: Asia/Dhaka
   media-dir: ${NIBASH_MEDIA_DIR:./media}
   jobs:
