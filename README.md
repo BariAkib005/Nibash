@@ -41,7 +41,7 @@ These have already bitten once and will bite again, so they're recorded here:
 Nibash/
 ├── backend/              Spring Boot API (Maven wrapper included — no local Maven needed)
 │   ├── Dockerfile        multi-stage: JDK 26 build → JRE 26 runtime, non-root
-│   └── src/main/resources/db/migration/V1__baseline.sql   ← the full 57-table schema
+│   └── src/main/resources/db/migration/   V1 = the 57-table baseline · V2 = invitations + public rentals
 ├── frontend/             React SPA
 │   ├── Dockerfile        Node build → Nginx
 │   └── nginx.conf        serves the build, proxies /api, /media and /ws (with the upgrade headers)
@@ -88,7 +88,7 @@ cd backend
 ./mvnw spring-boot:run            # Windows: .\mvnw.cmd spring-boot:run
 ```
 
-Serves on **http://localhost:8000**. On first boot Flyway creates all 57 tables.
+Serves on **http://localhost:8000**. On first boot Flyway creates all 58 tables (the V1 baseline plus V2).
 
 > If `java` isn't on your PATH, set `JAVA_HOME` first — e.g.
 > `$env:JAVA_HOME = "C:\Users\User\.jdks\openjdk-26.0.2"`
@@ -130,7 +130,8 @@ keeps the data; `docker compose down -v` also deletes it.
 - **Login / logout / session** — opaque `Authorization: Token <40-hex>` auth, session survives refresh
 - **App shell** — role-filtered sidebar, building switcher, notification bell, SOS, mobile drawer
 - **Tenant isolation** — a caller only ever sees buildings they belong to; a foreign id is a `404`, never a `403`
-- **Full database schema** — all 57 tables with every FK rule, unique constraint and index
+- **Full database schema** — the 57-table baseline with every FK rule, unique constraint and index,
+  plus V2's `invitations` table
 
 **Registry** — units, residents, staff, directory (with opt-in privacy gating)
 
@@ -174,6 +175,19 @@ monthly invoice once and are settled with it
 a multi-building **Portfolio** · an **Activity** log of billing runs, payments and document changes ·
 `GET /api/dashboard/summary/`, the single call returning all 8 metrics and 32 sections
 
+**Bringing people in** — a new owner signs up, adds flats, then invites everyone else from *Residents*
+(residents and committee members, optionally into a flat) and *Staff* (guards and staff, with their job). Each
+invitation is a one-time link, `/join#…`, to share by any channel — it is emailed too when SMTP is set up. The
+invitee sets a password and lands in the building with their own login, so guards can scan passes and staff can
+use *My shift*. Links expire after seven days and can be reissued or withdrawn from a *Waiting to join* list.
+
+**Public flats** — the committee can list a vacant flat for the building and publish any listing on
+**`/flats`**, which anyone can browse without an account. Someone looking for a home opens a flat, creates a
+renter account on the spot and sends a request with a note. The committee sees who is asking (name, email,
+phone, note) under *Rentals*; approving makes the applicant a **resident of that flat** — the flat is marked
+rented and leaves the public page — and the renter's *My requests* page (`/flats/mine`) sends them into
+their new building.
+
 **Jobs** — at 00:05 Asia/Dhaka past-due invoices become *overdue*; at 08:00 every invoice due by
 tomorrow gets an email reminder. The invoice *Remind* button sends the same email and an in-app
 notification.
@@ -195,6 +209,8 @@ Sign in as `admin1@nibash.bd` / `Nibash@2026` (every demo account shares that pa
 - **Parking** — Parking → click a free bay → pick a vehicle → *Assign bay* → the bay turns occupied; click it again → *Release*
 - **Documents** — Documents → *History* on the bylaws → download it → the audit trail gains a *download* row
 - **Vendors** — Vendors → *Find someone nearby* → Plumbing within 5 km lists one plumber; widen to 10 km and the Mirpur plumber appears, further away
+- **A new building** — sign up a fresh workspace → *Staff* → *Invite staff* → copy the link → open it in a private window → set a password → *My shift* → *Check in*
+- **Renting from outside** — open **http://127.0.0.1:5173/flats** signed out → *Sunny top-floor 3BHK — 06B* → create an account → *Send request* → as `committee1`, *Rentals* → the request is marked *From outside* → *Approve* → back as the renter, *My requests* → *Open your building*
 
 The step-by-step demo script for all five role journeys is in **[docs/DEMO.md](docs/DEMO.md)**.
 
@@ -236,7 +252,7 @@ cd backend
 ./mvnw test
 ```
 
-64 integration tests against a live MySQL schema, covering the rules that must never regress. CI runs
+70 integration tests against a live MySQL schema, covering the rules that must never regress. CI runs
 the same suite on every push (`.github/workflows/ci.yml`).
 
 | Suite | What it pins down |
@@ -244,6 +260,7 @@ the same suite on every push (`.github/workflows/ci.yml`).
 | `FacilitiesModulesTest` | nearby search honours the radius, nearest first · reviews are filed as the caller · only back-office manages global vendors · a download writes **exactly one** audit row · version chains cannot fork · non-allowlisted uploads rejected, media served with `nosniff` + sandbox CSP · chat notifies every *other* member, private rooms stay private · parking layout clamps and is idempotent, a bay never holds two vehicles · a utility bill is invoiced **once** and settled with its invoice · a gate pass only opens on its day, a checked-in visitor can't be cancelled · lift status keeps the latest per lift · recurring waste rolls forward · rentals: only the lister decides, contracts need approval · public ML estimate (200 hit / 202 miss) and intercom webhook · overview intersects buildings · client mistakes are 4xx, not 500 · expenses can be recorded from the multipart form |
 | `DashboardAndJobsTest` | every seeded role hydrates the full dashboard (8 metrics, 32 sections) · privacy gating inside the summary · foreign building falls back silently · **the summary's SQL statement count stays flat as rows are added** (no N+1) · the overdue sweep and reminders pick the right invoices and survive a rejected address · *Remind* leaves an in-app notification |
 | `ChatSocketTest` | on a real server: **two WebSocket clients in one room both receive a persisted message** · the server, not the client, sets the sender · bad tokens and non-members of a private room are refused at the handshake |
+| `MembershipAndPublicRentalsTest` | an owner invites a guard who joins with their own login and clocks in · a link works **once**; renewing retires the old one; an expired or withdrawn link is refused · invitations are for managers of their own building, one open invite per email, and an account can't be pulled into a second role · an owner publishes a flat, an outsider signs up and applies, and approval makes them a resident of that flat (flat marked rented, gone from `/flats`) · only managers publish or let someone in; a neighbour who isn't involved can't see the request |
 | `AuthFlowTest` | signup → login → me → logout, plus duplicate email, weak password, bad login, missing token |
 | `TenancyTest` | cross-building reads blocked, role gating, directory privacy, seeder idempotency |
 | `FinanceAndMaintenanceTest` | monthly batch creates nothing on a re-run · paid invoice rejected · **two concurrent checkouts write exactly one payment** · expense date/amount rules · idempotent check-in · ticket auto-assignment |
@@ -261,6 +278,11 @@ envelope `{count, next, previous, results}` at 20 per page.
 | Path | Auth | Notes |
 | --- | --- | --- |
 | `/api/auth/signup\|login\|logout\|me/` | mixed | Workspace creation and session |
+| `POST /api/auth/signup/renter/` | **public** | An account with no building, for someone applying for a flat |
+| `/api/invitations/` + `/{id}/renew/` | Committee/Admin | Invite as resident, committee, guard or staff; the response carries the one-time `invite_path` |
+| `POST /api/invitations/preview\|accept/` | **public** | The invitee's side: `{token}` → who/where; `{token, password}` → a signed-in session |
+| `GET /api/public/listings/` + `/{id}/` | **public** | Published flats nobody has been approved for; `?search= max_rent=`; no people in it |
+| `/api/rental-applications/` | Token | The caller's own requests across buildings; apply to a published flat, withdraw a pending one |
 | `/api/buildings/` `/units/` `/residents/` `/staff/` `/users/` `/directory/` | Token | Core registry |
 | `/api/invoices/` | Committee/Admin | `?resident_id= status= due_before= due_after=`; nested `items` |
 | `/api/invoices/generate-monthly/` | Committee/Admin | Idempotent batch → `{"created_invoices": [...]}` |
@@ -291,7 +313,7 @@ envelope `{count, next, previous, results}` at 20 per page.
 | `/api/assets/` `/asset-maintenance/` · `/api/lifts/status/` `/current/` | mixed | `warranty_state` on assets; latest status per lift |
 | `/api/utility-meters/` `/utility-bills/` + `/generate/` | Committee/Admin | `generate/` is idempotent per month |
 | `/api/waste-schedules/` + `/next/` | Committee/Admin | `next_occurrence` rolls recurring schedules forward |
-| `/api/listings/` `/rental-requests/` `/contracts/` | Token | pending → approved/rejected; contracts on approved requests only |
+| `/api/listings/` `/rental-requests/` `/contracts/` | Token | pending → approved/rejected; contracts on approved requests only; `is_public` is manager-only; residents see only requests they made or received |
 | `/api/ml/models/` `/training-runs/` `/city-cache/` · `POST /api/ml/price-estimate` | Committee/Admin · **public** | Estimate: 200 on a cache hit, 202 with `estimate: null` on a miss |
 | `/api/intercom/devices/` `/logs/` · `POST /api/intercom/webhook` | mixed · **public** | Webhook can require `X-Intercom-Secret` |
 | `/api/activity-logs/` | Committee/Admin (strict) | Read-only; scoped to people attached to your buildings |
@@ -307,6 +329,7 @@ Every setting comes from the environment — `backend/.env` when running with `.
 | --- | --- | --- |
 | `MYSQL_HOST` `MYSQL_PORT` `MYSQL_DATABASE` `MYSQL_USER` `MYSQL_PASSWORD` | `localhost` `3306` `nibash` `nibash` — | Database connection |
 | `SERVER_PORT` | `8000` | API port |
+| `NIBASH_APP_URL` | `http://127.0.0.1:5173` | Where people open the app — the base of the links in invitation and rental emails |
 | `NIBASH_MEDIA_DIR` | `./media` | Where uploads are stored (a volume in Docker) |
 | `NIBASH_CORS_ORIGINS` | the Vite dev server | Only matters when the browser calls the API cross-origin |
 | `NIBASH_SEED` | `false` | `true` runs the idempotent demo seeder at startup (same as `--seed`) |
@@ -348,6 +371,16 @@ scripts/db-restore.sh backups/<file>.sql.gz --docker --yes
   documents, PDFs, text and images for documents) and size, and served with
   `X-Content-Type-Options: nosniff` and a `sandbox` Content-Security-Policy, so an uploaded file can
   be displayed but never run script on this origin.
+- **Invitation links** carry 256 random bits in the URL *fragment* (`/join#…`), which browsers never send
+  to a server or put in a `Referer`; only a SHA-256 of the token is stored. A link works once (accepting
+  takes a row lock) and expires after seven days. An email that already has an account must give that
+  account's password to accept.
+- **One role per account.** An account's role applies in every building it belongs to, so an invitation
+  or a rental approval never gives an existing account a different role than it has — a resident of one
+  building can't become committee of another by accepting an invite. Brand-new accounts with no building
+  can take any role.
+- **The public flats page** shows only what a manager published — the flat and its building, never who
+  listed it or who asked.
 - **The chat socket** validates the session token during the handshake and applies the same room
   rules as the REST API; the server sets each message's sender.
 - **Errors** never leak a stack trace; client mistakes are `4xx` with the spec's wording.
@@ -374,6 +407,11 @@ Deliberate, and each covered by a test:
 | Activity logs | no public route | read-only route for managers, scoped to their people | the table has no building column |
 | Document ACLs | stored, not enforced | unchanged — **still not enforced on reads** | kept for parity (spec §15.6); enforcing them is the natural next step |
 | Health probe | — | `/actuator/health` (only `health` exposed) | container health checks |
+| Joining a building | only the owner signs up; no way in for anyone else | invitations for residents, committee, guards and staff | a new building could never get a guard, a resident or a committee |
+| Renting | neighbours only; requests are resident rows | published listings, renter accounts, `applicant` on requests; approving an outsider (managers only) makes them a resident | nobody from outside a building could ever rent in it |
+| Building listings | every listing belongs to a resident | a manager with no flat of their own lists for the building | the owner had no way to let a vacant flat |
+| Rental request list | every request in the building | managers see all; residents see only their own and those for their flats | outside applicants' names shouldn't reach every neighbour |
+| Session's home building | falls back to the first building in the system | only for back-office accounts; others get none | a renter with no building saw another building's name |
 
 ## Not done yet
 

@@ -1,7 +1,8 @@
 # Nibash — demo script
 
-The five journeys from the plan (§7), click by click, against the seeded demo data. Every account
-uses the password **`Nibash@2026`**. About 15 minutes end to end.
+The five journeys from the plan (§7), click by click, against the seeded demo data, plus a sixth: a
+brand-new building bringing its people in. Every demo account uses the password **`Nibash@2026`**.
+About 20 minutes end to end.
 
 **Before you start**
 
@@ -82,6 +83,28 @@ Sign in as **`committee1@nibash.bd`** (Farhana Haque).
 4. **Documents → New version** of the *Annual budget 2026*. *Expect:* version 3; version 2 is kept in *History*.
 5. **Facilities → Schedule service** for Lift B, and note the warranty warning for Lift B and the generator.
 
+## 6. A new building — from sign-up to its first tenant
+
+Use one normal window (the owner) and one private window (everyone else, one at a time).
+
+1. **Sign up** a new workspace (any email, a building name). *Expect:* an empty building, you as its admin.
+2. **Units → Add unit** twice, say 5A and 5B.
+3. **Staff → Invite staff** — *Security guard*, a name and any email → *Create invitation*.
+   *Expect:* a one-time link. Copy it (without SMTP the screen says to send it yourself).
+4. In the private window, open the link. *Expect:* “Join <your building>”. Choose a password → you are
+   the guard, in the building. **My shift → Check in** works, and so would Gate scan.
+   Open the same link again. *Expect:* “already been used”.
+5. Back as the owner: **Residents → Invite resident** into flat 5A the same way. The *Waiting to join*
+   list offers *New link* (the old one stops working) and *Withdraw*.
+6. **Rentals → List a flat** — flat 5B, *Show it on the public flats page* ticked. *Expect:* a *Public* badge.
+7. In the private window (signed out), open **/flats**. *Expect:* your flat, and the seeded
+   *Sunny top-floor 3BHK — 06B* from Gulshan. Open yours → *New to Nibash* → create an account →
+   write a note → *Send request*. **My requests** shows it *Waiting for the building*.
+8. As the owner: **Rentals** → the request is marked *From outside*, with the renter's email, phone and
+   note → *Approve*.
+9. As the renter: refresh **My requests**. *Expect:* “You're a resident of <building>” → *Open your
+   building* → the renter's workspace. Flat 5B is now *rented* on Units and gone from /flats.
+
 ---
 
 ## Things worth pointing out
@@ -91,5 +114,7 @@ Sign in as **`committee1@nibash.bd`** (Farhana Haque).
 - **Concurrency:** two simultaneous checkouts of one invoice write exactly one payment; two simultaneous
   bookings of one slot leave exactly one winner — both are pinned by the test suite.
 - **Live chat** runs over a WebSocket whose handshake checks the session token.
+- **Invitation links** keep their token in the `#fragment`, so it never reaches a server log; only its
+  hash is stored. And a resident lister can decline an outsider, but only the committee can let one in.
 - **One call** — `GET /api/dashboard/summary/` returns 8 metrics and 32 sections, with a statement
   count that stays flat as the data grows (tested).

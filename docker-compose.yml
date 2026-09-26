@@ -60,6 +60,8 @@ services:
       SMTP_TLS: ${SMTP_TLS:-false}
       # Nginx serves one origin, so the dev-only CORS list is irrelevant here.
       NIBASH_CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      # The base of the links in invitation and rental emails.
+      NIBASH_APP_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
     volumes:
       - media:/app/media
     healthcheck:

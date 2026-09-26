@@ -87,7 +87,7 @@ cp backend/.env.example backend/.env  # 2. backend config
 (cd frontend && npm install)          # 3. frontend packages
 ```
 
-Do **not** create tables by hand — Flyway builds all 57 on the backend's first boot.
+Do **not** create tables by hand — Flyway builds all 58 on the backend's first boot.
 
 ### Every time you want to run the app
 
