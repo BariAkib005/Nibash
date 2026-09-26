@@ -18,7 +18,9 @@ const REQUEST_TONE = { pending: 'amber', approved: 'green', rejected: 'slate' } 
 
 /**
  * Rentals (spec §8.14): residents list a flat, neighbours ask about it, and the lister approves or
- * declines. The rent guide reads the ML estimator's cached figure for a city (§8.22).
+ * declines. The committee can also list a flat for the building and publish any listing on the public
+ * flats page, where people from outside can ask for it; approving one of them makes them a resident,
+ * so only the committee may. The rent guide reads the ML estimator's cached figure for a city (§8.22).
  */
 export default function Rentals() {
   const { user } = useAuth()
@@ -27,6 +29,8 @@ export default function Rentals() {
   const toast = useToast()
   const queryClient = useQueryClient()
   const [listing, setListing] = useState(false)
+  const canManage = user?.role === 'admin' || user?.role === 'committee'
+  const canList = Boolean(resident) || canManage
 
   const { data: listings, isLoading } = useQuery({
     queryKey: ['listings', currentId],
@@ -40,7 +44,10 @@ export default function Rentals() {
   })
 
   const requestList = useMemo(() => requests?.results ?? [], [requests])
-  const incoming = requestList.filter((r) => r.lister_user === user?.id)
+  // Managers decide on every request in the building; anyone else, on requests for their own flats.
+  const incoming = requestList.filter((r) =>
+    canManage ? r.tenant_user !== user?.id : r.lister_user === user?.id,
+  )
   const mine = requestList.filter((r) => r.tenant_user === user?.id)
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['rental-requests'] })
@@ -65,6 +72,14 @@ export default function Rentals() {
     },
     onError: fail('Could not update the request.'),
   })
+  const publish = useMutation({
+    mutationFn: ({ id, value }: { id: number; value: boolean }) => api.updateListing(id, { is_public: value }),
+    onSuccess: (l) => {
+      toast.success(l.is_public ? `“${l.title}” is on the public flats page.` : `“${l.title}” is back to neighbours only.`)
+      refresh()
+    },
+    onError: fail('Could not change who can see it.'),
+  })
   const withdraw = useMutation({
     mutationFn: (id: number) => api.withdrawRental(id),
     onSuccess: () => {
@@ -80,7 +95,7 @@ export default function Rentals() {
         title="Rentals"
         subtitle="Flats for rent in the building — list yours, or ask about one."
         actions={
-          resident && (
+          canList && (
             <Button onClick={() => setListing(true)}>
               <Icon name="plus" size={16} />
               List a flat
@@ -107,6 +122,9 @@ export default function Rentals() {
                 canAsk={Boolean(resident)}
                 asking={ask.isPending}
                 onAsk={() => ask.mutate(item.id)}
+                canPublish={canManage}
+                publishing={publish.isPending}
+                onPublish={(value) => publish.mutate({ id: item.id, value })}
               />
             ))}
           </div>
@@ -115,7 +133,7 @@ export default function Rentals() {
             icon="home"
             title="Nothing listed right now"
             body="When a neighbour lists a flat it appears here. Moving out? List yours."
-            action={resident ? <Button onClick={() => setListing(true)}>List a flat</Button> : undefined}
+            action={canList ? <Button onClick={() => setListing(true)}>List a flat</Button> : undefined}
           />
         )}
       </section>
@@ -124,15 +142,24 @@ export default function Rentals() {
         <div className="grid gap-5 lg:grid-cols-2">
           {incoming.length > 0 && (
             <RequestList
-              title="Requests for your flats"
-              hint="Approve one to go ahead; the others stay on file."
+              title={canManage ? 'Requests' : 'Requests for your flats'}
+              hint={
+                canManage
+                  ? 'Approve one to go ahead; the others stay on file. Approving someone from outside makes them a resident of the flat.'
+                  : 'Approve one to go ahead; the others stay on file.'
+              }
               requests={incoming}
+              detail={(r) => <RequestDetail request={r} />}
               render={(r) =>
                 r.status === 'pending' ? (
-                  <span className="flex gap-1">
-                    <Button className="px-2.5 py-1 text-xs" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, status: 'approved' })}>
-                      Approve
-                    </Button>
+                  <span className="flex items-center gap-1">
+                    {r.outside_applicant && !canManage ? (
+                      <span className="px-1 text-[10px] text-slate-500">Committee approves</span>
+                    ) : (
+                      <Button className="px-2.5 py-1 text-xs" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, status: 'approved' })}>
+                        Approve
+                      </Button>
+                    )}
                     <Button variant="ghost" className="px-2 py-1 text-xs" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, status: 'rejected' })}>
                       Decline
                     </Button>
@@ -221,6 +248,9 @@ function ListingCard({
   canAsk,
   asking,
   onAsk,
+  canPublish,
+  publishing,
+  onPublish,
 }: {
   listing: ApiListing
   mine: boolean
@@ -229,6 +259,9 @@ function ListingCard({
   canAsk: boolean
   asking: boolean
   onAsk: () => void
+  canPublish: boolean
+  publishing: boolean
+  onPublish: (value: boolean) => void
 }) {
   return (
     <Card className="flex flex-col">
@@ -239,7 +272,10 @@ function ListingCard({
             {listing.unit_number ? `Unit ${listing.unit_number} · ` : ''}Listed by {mine ? 'you' : listing.resident_name}
           </p>
         </div>
-        {mine && <Badge tone="blue">Yours</Badge>}
+        <span className="flex shrink-0 gap-1">
+          {listing.is_public && <Badge tone="violet">Public</Badge>}
+          {mine && <Badge tone="blue">Yours</Badge>}
+        </span>
       </div>
       <p className="metric-value !mt-4 !text-[26px]">
         {taka(listing.rent)}
@@ -261,6 +297,23 @@ function ListingCard({
           <Button className="px-3 py-1.5 text-xs" loading={asking} onClick={onAsk}>Request to rent</Button>
         ) : null}
       </div>
+      {canPublish && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <span className="text-[11px] text-slate-500">
+            {listing.is_public ? 'Anyone can find it on the public flats page.' : 'Only people in the building can see it.'}
+          </span>
+          <span className="flex items-center gap-3">
+            {listing.is_public && (
+              <a href={`/flats/${listing.id}`} target="_blank" rel="noreferrer" className="text-link !text-[11px]">
+                View
+              </a>
+            )}
+            <button type="button" className="text-link !text-[11px]" disabled={publishing} onClick={() => onPublish(!listing.is_public)}>
+              {listing.is_public ? 'Take off flats page' : 'Publish on flats page'}
+            </button>
+          </span>
+        </div>
+      )}
     </Card>
   )
 }
@@ -271,12 +324,14 @@ function RequestList({
   requests,
   render,
   who,
+  detail,
 }: {
   title: string
   hint: string
   requests: ApiRentalRequest[]
   render: (r: ApiRentalRequest) => ReactNode
   who: (r: ApiRentalRequest) => string
+  detail?: (r: ApiRentalRequest) => ReactNode
 }) {
   return (
     <Card>
@@ -289,12 +344,28 @@ function RequestList({
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium text-slate-800">{who(r)}</p>
               <p className="mt-0.5 text-[10px] text-slate-500">Asked {formatDate(r.requested_at)}</p>
+              {detail?.(r)}
             </div>
             {render(r)}
           </li>
         ))}
       </ul>
     </Card>
+  )
+}
+
+/** Who is asking, how to reach them, and what they said — for the people deciding. */
+function RequestDetail({ request }: { request: ApiRentalRequest }) {
+  const contact = [request.applicant_email, request.applicant_phone].filter(Boolean).join(' · ')
+  return (
+    <div className="mt-1.5 space-y-1 text-[11px] text-slate-600">
+      <p className="flex flex-wrap items-center gap-1.5">
+        <span className="truncate">{request.listing_title}</span>
+        {request.outside_applicant && <Badge tone="violet">From outside</Badge>}
+      </p>
+      {contact && <p className="truncate text-slate-500">{contact}</p>}
+      {request.message && <p className="line-clamp-2 italic">“{request.message}”</p>}
+    </div>
   )
 }
 
@@ -310,7 +381,10 @@ function ListingDialog({
   onDone: (listing: ApiListing) => void
 }) {
   const toast = useToast()
+  const { user } = useAuth()
   const { resident } = useCurrentResident()
+  const canPublish = user?.role === 'admin' || user?.role === 'committee'
+  const [isPublic, setIsPublic] = useState(true)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [rent, setRent] = useState('')
@@ -319,7 +393,7 @@ function ListingDialog({
 
   const { data: units } = useQuery({
     queryKey: ['units', buildingId, 'listing-picker'],
-    queryFn: () => api.units({ building_id: buildingId }),
+    queryFn: () => api.units({ building_id: buildingId, page_size: 500 }),
     enabled: open && Boolean(buildingId),
   })
   const selectedUnit = unit || String(resident?.unit ?? '')
@@ -334,6 +408,7 @@ function ListingDialog({
         rent,
         available_from: from,
         unit: selectedUnit ? Number(selectedUnit) : undefined,
+        is_public: canPublish && isPublic,
       }),
     onSuccess: (l) => {
       setTitle('')
@@ -375,6 +450,22 @@ function ListingDialog({
           <option key={u.id} value={u.id}>{u.unit_number}</option>
         ))}
       </Select>
+      {canPublish && (
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
+          />
+          <span>
+            Show it on the public flats page
+            <span className="mt-0.5 block text-xs text-slate-500">
+              People from outside the building can find it and ask for it. You approve who moves in.
+            </span>
+          </span>
+        </label>
+      )}
     </Modal>
   )
 }

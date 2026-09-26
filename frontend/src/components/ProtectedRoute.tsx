@@ -8,7 +8,7 @@ import { Skeleton } from './ui'
  * never a flash of the login page for someone who is actually signed in.
  */
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, building, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -37,6 +37,12 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!user) {
     // Remember where they were headed so login can send them back.
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (!building) {
+    // Signed in but part of no building yet — a renter waiting on a request. Their page is the
+    // list of their requests, not a workspace they cannot open.
+    return <Navigate to="/flats/mine" replace />
   }
 
   return <>{children}</>

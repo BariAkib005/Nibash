@@ -60,6 +60,7 @@ export default function Landing() {
           <nav aria-label="Main navigation" className="site-links">
             <a href="#features">The platform</a>
             <a href="#community">Who it’s for</a>
+            <Link to="/flats">Flats for rent</Link>
           </nav>
           <div className="flex items-center gap-5">
             {!user && (

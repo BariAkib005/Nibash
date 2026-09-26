@@ -7,6 +7,9 @@ import { useToast } from '../lib/toast'
 import DataTable, { Badge } from '../components/DataTable'
 import type { Column } from '../components/DataTable'
 import PageHeader from '../components/PageHeader'
+import { Button } from '../components/ui'
+import Icon from '../components/Icon'
+import { InviteDialog, PendingInvitations } from '../components/Invitations'
 import type { ApiResident } from '../types'
 
 export default function Residents() {
@@ -15,6 +18,7 @@ export default function Residents() {
   const toast = useToast()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
+  const [inviting, setInviting] = useState(false)
 
   const canManage = user?.role === 'admin' || user?.role === 'committee'
 
@@ -83,7 +87,16 @@ export default function Residents() {
       <PageHeader
         title="Residents"
         subtitle="Who lives in this building, and whether they share contact details in the directory."
+        actions={
+          canManage && (
+            <Button onClick={() => setInviting(true)}>
+              <Icon name="plus" size={16} />
+              Invite resident
+            </Button>
+          )
+        }
       />
+      {canManage && <PendingInvitations buildingId={currentId} roles={['resident', 'committee']} />}
       <DataTable
         columns={columns}
         rows={data?.results ?? []}
@@ -96,8 +109,17 @@ export default function Residents() {
           icon: '🏠',
           title: 'No residents yet',
           body: 'A resident links a user account to this building, and optionally to a unit.',
+          action: canManage ? <Button onClick={() => setInviting(true)}>Invite resident</Button> : undefined,
         }}
       />
+      {canManage && (
+        <InviteDialog
+          open={inviting}
+          buildingId={currentId}
+          roles={['resident', 'committee']}
+          onClose={() => setInviting(false)}
+        />
+      )}
     </div>
   )
 }

@@ -47,6 +47,12 @@ const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Activity = lazy(() => import('./pages/Activity'))
 const MyShift = lazy(() => import('./pages/MyShift'))
 
+// Public pages beyond the landing: joining by invitation, and the flats page for people outside any building.
+const JoinBuilding = lazy(() => import('./pages/JoinBuilding'))
+const Flats = lazy(() => import('./pages/Flats'))
+const FlatDetail = lazy(() => import('./pages/FlatDetail'))
+const MyApplications = lazy(() => import('./pages/MyApplications'))
+
 /** Shown while a route chunk downloads — a skeleton, never a spinner on a blank page. */
 function RouteFallback() {
   return (
@@ -68,6 +74,10 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/join" element={<Suspense fallback={null}><JoinBuilding /></Suspense>} />
+            <Route path="/flats" element={<Suspense fallback={null}><Flats /></Suspense>} />
+            <Route path="/flats/mine" element={<Suspense fallback={null}><MyApplications /></Suspense>} />
+            <Route path="/flats/:id" element={<Suspense fallback={null}><FlatDetail /></Suspense>} />
 
             {/* authenticated — BuildingProvider needs a session, so it lives inside the guard */}
             <Route

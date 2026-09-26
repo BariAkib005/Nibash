@@ -559,9 +559,10 @@ export interface ApiUtilityBill {
 
 // ---------------------------------------------------------------- rentals
 
+/** resident is null when the building lists the flat itself; resident_name is then the manager who posted it. */
 export interface ApiListing {
   id: number
-  resident: number
+  resident: number | null
   building: number
   unit: number | null
   title: string
@@ -571,19 +572,106 @@ export interface ApiListing {
   created_at: string
   resident_name: string
   unit_number: string | null
-  lister_user: number
+  lister_user: number | null
+  is_public: boolean
 }
 
+/**
+ * tenant_name/tenant_user are the applicant. tenant is null for someone from outside the building
+ * until they are approved. Contact details come back only for the people deciding and the applicant.
+ */
 export interface ApiRentalRequest {
   id: number
   listing: number
-  tenant: number
+  tenant: number | null
   status: 'pending' | 'approved' | 'rejected'
   requested_at: string
   listing_title: string
   tenant_name: string
   tenant_user: number
-  lister_user: number
+  lister_user: number | null
+  message: string | null
+  outside_applicant: boolean
+  applicant_email: string | null
+  applicant_phone: string | null
+}
+
+/** A published flat as anyone may see it — the flat and its building, nothing about its people. */
+export interface PublicListing {
+  id: number
+  title: string
+  description: string
+  rent: string | number
+  available_from: string
+  created_at: string
+  building_name: string
+  building_address: string
+  unit_number: string | null
+  unit_type: string | null
+  size_sqft: string | number | null
+  floor: number | null
+}
+
+/** One of the caller's own requests. listing_let: someone else was approved for the flat. */
+export interface ApiRentalApplication {
+  id: number
+  listing: number
+  listing_title: string
+  building_name: string
+  building_address: string
+  rent: string | number
+  available_from: string
+  status: 'pending' | 'approved' | 'rejected'
+  requested_at: string
+  message: string | null
+  listing_let: boolean
+}
+
+export interface RenterSignupPayload {
+  name: string
+  email: string
+  password: string
+  phone?: string
+}
+
+export type InvitableRole = 'resident' | 'committee' | 'guard' | 'staff'
+
+export interface ApiInvitation {
+  id: number
+  building: number
+  email: string
+  name: string
+  phone: string | null
+  role: InvitableRole
+  unit: number | null
+  unit_number: string | null
+  is_owner: boolean
+  staff_role: string | null
+  designation: string | null
+  status: 'pending' | 'expired' | 'accepted'
+  created_at: string
+  expires_at: string
+  accepted_at: string | null
+  invited_by_name: string | null
+}
+
+/** Create and renew responses: the only time the link is shown. invite_path is /join#<token>. */
+export interface IssuedInvitation {
+  invitation: ApiInvitation
+  invite_path: string
+  emailed: boolean
+}
+
+export interface InvitationPreview {
+  building_name: string
+  building_address: string
+  name: string
+  email: string
+  role: InvitableRole
+  unit_number: string | null
+  staff_role: string | null
+  expires_at: string
+  account_exists: boolean
 }
 
 export interface PriceEstimate {

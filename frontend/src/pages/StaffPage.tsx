@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
 import { useBuilding } from '../lib/building'
+import { useAuth } from '../lib/auth'
 import { useToast } from '../lib/toast'
 import DataTable, { Badge } from '../components/DataTable'
 import type { Column } from '../components/DataTable'
 import PageHeader from '../components/PageHeader'
 import { Button, Card, Skeleton } from '../components/ui'
+import Icon from '../components/Icon'
+import { InviteDialog, PendingInvitations } from '../components/Invitations'
 import { formatDateTime } from '../lib/format'
 import type { ApiAttendance, ApiStaff } from '../types'
 
@@ -18,7 +21,10 @@ const ROLE_TONE: Record<string, 'green' | 'amber' | 'blue' | 'slate'> = {
 
 export default function StaffPage() {
   const { currentId } = useBuilding()
+  const { user } = useAuth()
   const [page, setPage] = useState(1)
+  const [inviting, setInviting] = useState(false)
+  const canManage = user?.role === 'admin' || user?.role === 'committee'
 
   const { data, isLoading } = useQuery({
     queryKey: ['staff', currentId, page],
@@ -41,7 +47,19 @@ export default function StaffPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <PageHeader title="Staff" subtitle="Employment records and today’s shifts" />
+      <PageHeader
+        title="Staff"
+        subtitle="Employment records and today’s shifts"
+        actions={
+          canManage && (
+            <Button onClick={() => setInviting(true)}>
+              <Icon name="plus" size={16} />
+              Invite staff
+            </Button>
+          )
+        }
+      />
+      {canManage && <PendingInvitations buildingId={currentId} roles={['guard', 'staff']} />}
 
       <AttendanceBoard buildingId={currentId} staff={data?.results ?? []} loading={isLoading} />
 
@@ -57,8 +75,17 @@ export default function StaffPage() {
           icon: '🧰',
           title: 'No staff yet',
           body: 'Staff can exist without a login account — useful for people who are scheduled but never use the app.',
+          action: canManage ? <Button onClick={() => setInviting(true)}>Invite staff</Button> : undefined,
         }}
       />
+      {canManage && (
+        <InviteDialog
+          open={inviting}
+          buildingId={currentId}
+          roles={['guard', 'staff']}
+          onClose={() => setInviting(false)}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, clearToken, getToken, setToken } from './api'
-import type { ApiBuilding, ApiUser, SignupPayload } from '../types'
+import type { ApiBuilding, ApiUser, AuthResponse, SignupPayload } from '../types'
 
 interface AuthState {
   user: ApiUser | null
@@ -10,6 +11,8 @@ interface AuthState {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   signup: (payload: SignupPayload) => Promise<void>
+  /** Adopts a session another endpoint issued — accepting an invitation, or a renter signing up. */
+  startSession: (result: AuthResponse) => void
   logout: () => Promise<void>
 }
 
@@ -19,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ApiUser | null>(null)
   const [building, setBuilding] = useState<ApiBuilding | null>(null)
   const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   // Re-hydrate the session on boot so a page refresh keeps you logged in.
   useEffect(() => {
@@ -59,6 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBuilding(result.building)
   }, [])
 
+  const startSession = useCallback((result: AuthResponse) => {
+    // A different account may have been signed in on this browser; none of its data may linger.
+    queryClient.clear()
+    setToken(result.token)
+    setUser(result.user)
+    setBuilding(result.building)
+  }, [queryClient])
+
   const logout = useCallback(async () => {
     try {
       await api.logout()
@@ -71,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AuthState>(
-    () => ({ user, building, loading, login, signup, logout }),
-    [user, building, loading, login, signup, logout],
+    () => ({ user, building, loading, login, signup, startSession, logout }),
+    [user, building, loading, login, signup, startSession, logout],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

@@ -10,9 +10,11 @@ import type {
   ApiIntercomDevice,
   ApiIntercomLog,
   ApiLiftStatus,
+  ApiInvitation,
   ApiListing,
   ApiMessage,
   ApiParkingSlot,
+  ApiRentalApplication,
   ApiRentalRequest,
   ApiReview,
   ApiService,
@@ -21,8 +23,12 @@ import type {
   ApiVehicle,
   ApiVendor,
   ApiWasteSchedule,
+  InvitationPreview,
+  IssuedInvitation,
   ParkingLayout,
   PriceEstimate,
+  PublicListing,
+  RenterSignupPayload,
   ApiAppointment,
   ApiAttendance,
   ApiAttendee,
@@ -200,6 +206,10 @@ export const api = {
   signup: (payload: SignupPayload) =>
     request<AuthResponse>('/api/auth/signup/', { method: 'POST', body: payload, auth: false }),
 
+  /** An account for someone looking for a flat — it belongs to no building until a request is approved. */
+  renterSignup: (payload: RenterSignupPayload) =>
+    request<AuthResponse>('/api/auth/signup/renter/', { method: 'POST', body: payload, auth: false }),
+
   logout: () => request<{ detail: string }>('/api/auth/logout/', { method: 'POST' }),
 
   me: () => request<SessionResponse>('/api/auth/me/'),
@@ -207,7 +217,7 @@ export const api = {
   // ---------------------------------------------------------------- registry
   buildings: (page = 1) => request<Page<ApiBuilding>>(`/api/buildings/${qs({ page })}`),
 
-  units: (params: { page?: number; building_id?: number; status?: string } = {}) =>
+  units: (params: { page?: number; building_id?: number; status?: string; page_size?: number } = {}) =>
     request<Page<ApiUnit>>(`/api/units/${qs(params)}`),
 
   createUnit: (body: Record<string, unknown>) =>
@@ -598,6 +608,42 @@ export const api = {
     request<ApiRentalRequest>(`/api/rental-requests/${id}/`, { method: 'PATCH', body: { status } }),
 
   withdrawRental: (id: number) => request<void>(`/api/rental-requests/${id}/`, { method: 'DELETE' }),
+
+  updateListing: (id: number, body: Record<string, unknown>) =>
+    request<ApiListing>(`/api/listings/${id}/`, { method: 'PATCH', body }),
+
+  // ---------------------------------------------------------------- the public flats page
+  publicListings: (params: { page?: number; search?: string; max_rent?: string } = {}) =>
+    request<Page<PublicListing>>(`/api/public/listings/${qs(params)}`, { auth: false }),
+
+  publicListing: (id: number) => request<PublicListing>(`/api/public/listings/${id}/`, { auth: false }),
+
+  rentalApplications: () => request<Page<ApiRentalApplication>>('/api/rental-applications/'),
+
+  applyForFlat: (listing: number, message: string) =>
+    request<ApiRentalApplication>('/api/rental-applications/', {
+      method: 'POST',
+      body: { listing, message: message || undefined },
+    }),
+
+  withdrawApplication: (id: number) => request<void>(`/api/rental-applications/${id}/`, { method: 'DELETE' }),
+
+  // ---------------------------------------------------------------- invitations
+  invitations: (params: { page?: number; building_id?: number; roles?: string } = {}) =>
+    request<Page<ApiInvitation>>(`/api/invitations/${qs(params)}`),
+
+  invite: (body: Record<string, unknown>) =>
+    request<IssuedInvitation>('/api/invitations/', { method: 'POST', body }),
+
+  renewInvitation: (id: number) => request<IssuedInvitation>(`/api/invitations/${id}/renew/`, { method: 'POST' }),
+
+  revokeInvitation: (id: number) => request<void>(`/api/invitations/${id}/`, { method: 'DELETE' }),
+
+  previewInvitation: (token: string) =>
+    request<InvitationPreview>('/api/invitations/preview/', { method: 'POST', body: { token }, auth: false }),
+
+  acceptInvitation: (body: { token: string; password: string; name?: string; phone?: string }) =>
+    request<AuthResponse>('/api/invitations/accept/', { method: 'POST', body, auth: false }),
 
   /**
    * Public (AllowAny) — a cache miss answers 202 with a null estimate rather than an error,
