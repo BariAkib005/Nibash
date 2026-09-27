@@ -47,6 +47,7 @@ Nibash/
 │   └── nginx.conf        serves the build, proxies /api, /media and /ws (with the upgrade headers)
 ├── docker-compose.yml    MySQL + API + Nginx, one command
 ├── scripts/              db-backup.sh / db-restore.sh
+├── tools/device-simulator/  a door panel in one Java file, for the device gateway (no hardware needed)
 ├── .github/workflows/    CI: backend tests on MySQL, frontend lint + build, both images build
 ├── db/setup.sql          One-time local database + app-user creation
 └── docs/DEMO.md          The five demo journeys, click by click
@@ -188,9 +189,63 @@ phone, note) under *Rentals*; approving makes the applicant a **resident of that
 rented and leaves the public page — and the renter's *My requests* page (`/flats/mine`) sends them into
 their new building.
 
+**Door hardware** — intercom panels, card readers and gate controllers connect to the API's
+**device gateway** over TCP (port 9500). A swiped card is checked against the building's access cards
+and answered *allow* or *deny* on the spot; rings, swipes and the door sensor land in the intercom and
+gate logs; *Safety & access* shows which panels are online, and a guard can **open the door** from
+there — the command travels down the panel's live connection. No hardware? Run the simulator.
+
 **Jobs** — at 00:05 Asia/Dhaka past-due invoices become *overdue*; at 08:00 every invoice due by
 tomorrow gets an email reminder. The invoice *Remind* button sends the same email and an in-app
 notification.
+
+### Threads and networking
+
+Both are part of how the product works, not add-ons. Where to look:
+
+**Networking — client–server over sockets**
+
+| What | Where | How |
+| --- | --- | --- |
+| **Door hardware gateway** — a TCP server | [`device/DeviceGateway.java`](backend/src/main/java/com/nibash/device/DeviceGateway.java) | a `java.net.ServerSocket` on port 9500 that intercom panels and card readers connect to and stay connected to |
+| The panel protocol | [`device/DeviceConnection.java`](backend/src/main/java/com/nibash/device/DeviceConnection.java) | a line-based text protocol over the socket: `HELLO` · `PING`/`PONG` · `RING` · `CARD` → `ALLOW`/`DENY` · `DOOR OPENED/CLOSED` · `BYE`, and `OPEN` **pushed by the server** when someone releases the door |
+| A socket client | [`tools/device-simulator/DeviceSimulator.java`](tools/device-simulator/DeviceSimulator.java) | a `java.net.Socket` client standing in for a panel |
+| Live chat | [`chat/ChatSocketHandler.java`](backend/src/main/java/com/nibash/chat/ChatSocketHandler.java), [`ChatSocketRegistry.java`](backend/src/main/java/com/nibash/chat/ChatSocketRegistry.java) | a WebSocket per open chat room: the server pushes each saved message and typing frames to every other member's browser |
+| The web app itself | [`frontend/src/lib/api.ts`](frontend/src/lib/api.ts) ↔ the REST controllers | the React client talks to the Spring Boot server over HTTP/JSON; in Docker, Nginx proxies HTTP and upgrades the WebSocket |
+
+**Threads — work that runs concurrently**
+
+| What | Where | How |
+| --- | --- | --- |
+| Accepting panels | `DeviceGateway` | a dedicated `device-acceptor` thread blocks in `accept()` and hands each socket to a worker pool |
+| One thread per connected panel | `DeviceGateway`, `DeviceConnection` | a bounded `ThreadPoolExecutor` (`device-1…32`); each worker serves one panel for as long as it is connected. When all are busy a new panel gets `ERR busy` instead of waiting unanswered |
+| Two threads, one socket | `DeviceConnection.send` | the panel's worker thread answers it while a web request thread pushes `OPEN` to the same socket, so writes are `synchronized` |
+| Who is online | [`device/DeviceRegistry.java`](backend/src/main/java/com/nibash/device/DeviceRegistry.java) | a `ConcurrentHashMap` shared by worker threads (joining/leaving) and request threads (status, `OPEN`), with value-conditional removal so a replaced connection can't unregister its successor |
+| Silent panels | `DeviceConnection` | socket read timeouts: no `HELLO` in 10 s, or nothing (not even `PING`) for 60 s, and the connection is closed |
+| Email off the request thread | [`jobs/NotificationService.java`](backend/src/main/java/com/nibash/jobs/NotificationService.java) | a `mail-1…4` thread pool; request-time mail (rental replies, invoice *Remind*) is queued **after the transaction commits**, so no request waits on SMTP |
+| Reminders in parallel | [`jobs/InvoiceJobs.java`](backend/src/main/java/com/nibash/jobs/InvoiceJobs.java) | the 08:00 batch is read on one thread, then sent with `invokeAll` across the mail pool and counted from the futures |
+| Scheduled jobs | `InvoiceJobs` | the overdue sweep and reminders run on Spring's scheduler thread, in Asia/Dhaka time |
+| Concurrent requests stay correct | `InvoiceRepository`, `BookingRepository`, `InvitationRepository` | row locks (`PESSIMISTIC_WRITE`): two simultaneous checkouts write one payment, two simultaneous bookings leave one winner, an invitation link works once |
+| Proven under concurrency | `DeviceGatewayTest`, `FinanceAndMaintenanceTest`, `SecurityCommunityBookingTest`, `ChatSocketTest` | ten panels connected at once over real sockets; concurrent checkouts and bookings from a thread pool; two WebSocket clients receiving one message |
+
+### Door hardware
+
+Every intercom device registered on *Safety & access* can connect to the gateway. Try it without
+hardware — with the backend running, in a second terminal:
+
+```bash
+java tools/device-simulator/DeviceSimulator.java --device 1 --demo     # the seeded North Gate Intercom
+```
+
+It rings flat 01A, swipes Ayesha's card (`ALLOW Ayesha`) and an unknown one (`DENY unknown card`),
+then waits. Sign in as `guard1@nibash.bd` → *Safety & access*: the panel shows **online** and the log
+shows each event. Press **Open door** and the simulator prints `door released for 5 s by Jamal Uddin`,
+reports the door open, and closes it five seconds later. Type `ring 02A`, `card GLH-AC-0001` or
+`quit` to drive it by hand; stop it and the panel goes **offline**.
+
+A panel can be anything that opens a TCP socket — `nc localhost 9500` and typing `HELLO 1` works too.
+Without `NIBASH_DEVICE_SECRET` the gateway accepts a panel only from the IP address it was registered
+with (or from this machine); with a secret, the panel sends `HELLO <id> <secret>`.
 
 ### Verify the journeys
 
@@ -252,7 +307,7 @@ cd backend
 ./mvnw test
 ```
 
-70 integration tests against a live MySQL schema, covering the rules that must never regress. CI runs
+76 integration tests against a live MySQL schema, covering the rules that must never regress. CI runs
 the same suite on every push (`.github/workflows/ci.yml`).
 
 | Suite | What it pins down |
@@ -260,6 +315,7 @@ the same suite on every push (`.github/workflows/ci.yml`).
 | `FacilitiesModulesTest` | nearby search honours the radius, nearest first · reviews are filed as the caller · only back-office manages global vendors · a download writes **exactly one** audit row · version chains cannot fork · non-allowlisted uploads rejected, media served with `nosniff` + sandbox CSP · chat notifies every *other* member, private rooms stay private · parking layout clamps and is idempotent, a bay never holds two vehicles · a utility bill is invoiced **once** and settled with its invoice · a gate pass only opens on its day, a checked-in visitor can't be cancelled · lift status keeps the latest per lift · recurring waste rolls forward · rentals: only the lister decides, contracts need approval · public ML estimate (200 hit / 202 miss) and intercom webhook · overview intersects buildings · client mistakes are 4xx, not 500 · expenses can be recorded from the multipart form |
 | `DashboardAndJobsTest` | every seeded role hydrates the full dashboard (8 metrics, 32 sections) · privacy gating inside the summary · foreign building falls back silently · **the summary's SQL statement count stays flat as rows are added** (no N+1) · the overdue sweep and reminders pick the right invoices and survive a rejected address · *Remind* leaves an in-app notification |
 | `ChatSocketTest` | on a real server: **two WebSocket clients in one room both receive a persisted message** · the server, not the client, sets the sender · bad tokens and non-members of a private room are refused at the handshake |
+| `DeviceGatewayTest` | over real TCP sockets: a panel must say `HELLO` first and unknown devices are refused · card swipes answer `ALLOW`/`DENY` and the door sensor lands in the gate log · **a web request pushes `OPEN` down a panel's live connection**, and an offline panel is a 400 · **ten panels connected at once, each served by its own worker thread** · a silent panel is dropped after the idle timeout and an oversized line is refused · a reconnecting panel replaces its old connection · the secret / registered-address trust rule |
 | `MembershipAndPublicRentalsTest` | an owner invites a guard who joins with their own login and clocks in · a link works **once**; renewing retires the old one; an expired or withdrawn link is refused · invitations are for managers of their own building, one open invite per email, and an account can't be pulled into a second role · an owner publishes a flat, an outsider signs up and applies, and approval makes them a resident of that flat (flat marked rented, gone from `/flats`) · only managers publish or let someone in; a neighbour who isn't involved can't see the request |
 | `AuthFlowTest` | signup → login → me → logout, plus duplicate email, weak password, bad login, missing token |
 | `TenancyTest` | cross-building reads blocked, role gating, directory privacy, seeder idempotency |
@@ -315,7 +371,9 @@ envelope `{count, next, previous, results}` at 20 per page.
 | `/api/waste-schedules/` + `/next/` | Committee/Admin | `next_occurrence` rolls recurring schedules forward |
 | `/api/listings/` `/rental-requests/` `/contracts/` | Token | pending → approved/rejected; contracts on approved requests only; `is_public` is manager-only; residents see only requests they made or received |
 | `/api/ml/models/` `/training-runs/` `/city-cache/` · `POST /api/ml/price-estimate` | Committee/Admin · **public** | Estimate: 200 on a cache hit, 202 with `estimate: null` on a miss |
-| `/api/intercom/devices/` `/logs/` · `POST /api/intercom/webhook` | mixed · **public** | Webhook can require `X-Intercom-Secret` |
+| `/api/intercom/devices/` `/logs/` · `POST /api/intercom/webhook` | mixed · **public** | Devices report `online`/`last_seen` from the gateway; webhook can require `X-Intercom-Secret` |
+| `POST /api/intercom/devices/{id}/open/` · `GET /api/intercom/gateway/` | Guard/Committee/Admin · Token | Pushes `OPEN` to the panel's live connection (400 if offline); gateway port and connected count |
+| `tcp://…:9500` | `HELLO <id> [secret]` | The device gateway's line protocol — see *Door hardware* |
 | `/api/activity-logs/` | Committee/Admin (strict) | Read-only; scoped to people attached to your buildings |
 
 ---
@@ -336,6 +394,10 @@ Every setting comes from the environment — `backend/.env` when running with `.
 | `NIBASH_JOBS_ENABLED` | `true` | The 00:05 overdue sweep and 08:00 reminders |
 | `NIBASH_INTERCOM_WEBHOOK_SECRET` | empty | When set, `POST /api/intercom/webhook` needs it in `X-Intercom-Secret` |
 | `NIBASH_MAIL_FROM` `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASSWORD` `SMTP_AUTH` `SMTP_TLS` | no-ops without a server | Reminder email; a missing server is logged, never fatal |
+| `NIBASH_MAIL_THREADS` | `4` | Size of the mail thread pool |
+| `NIBASH_DEVICES_ENABLED` `NIBASH_DEVICE_PORT` | `true` `9500` | The door-hardware gateway (TCP) |
+| `NIBASH_DEVICE_WORKERS` `NIBASH_DEVICE_IDLE_SECONDS` | `32` `60` | Panels served at once (one thread each); how long a silent panel stays connected |
+| `NIBASH_DEVICE_SECRET` | empty | When set, panels must send it in `HELLO`; when empty, a panel is trusted only from its registered IP. **Set it in Docker**, where every panel appears to come from the bridge address |
 
 ## Background jobs
 
@@ -344,7 +406,7 @@ Both run on **Asia/Dhaka** time and can be switched off with `NIBASH_JOBS_ENABLE
 | When | Job | Rule |
 | --- | --- | --- |
 | 00:05 daily | Overdue sweep | `pending` invoices whose due date has passed become `overdue` |
-| 08:00 daily | Invoice reminders | every `pending` or `overdue` invoice due by tomorrow gets `Reminder: Invoice {number} due {date}`; a rejected address is logged and the batch carries on |
+| 08:00 daily | Invoice reminders | every `pending` or `overdue` invoice due by tomorrow gets `Reminder: Invoice {number} due {date}`, sent concurrently on the mail pool; a rejected address is logged and the batch carries on |
 
 ## Backups and restore
 
@@ -381,6 +443,11 @@ scripts/db-restore.sh backups/<file>.sql.gz --docker --yes
   can take any role.
 - **The public flats page** shows only what a manager published — the flat and its building, never who
   listed it or who asked.
+- **The device gateway** accepts a panel only with the configured secret (compared in constant time)
+  or, without one, from the IP it was registered with. Lines are capped at 256 characters, a panel
+  must say `HELLO` within 10 s, silent panels are dropped, the worker pool is bounded, and only guards
+  and managers can release a door. It speaks plain TCP: on an untrusted network, put it behind a VPN
+  or a TLS terminator.
 - **The chat socket** validates the session token during the handshake and applies the same room
   rules as the REST API; the server sets each message's sender.
 - **Errors** never leak a stack trace; client mistakes are `4xx` with the spec's wording.

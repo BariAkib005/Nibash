@@ -59,6 +59,11 @@ Sign in as **`guard1@nibash.bd`** (Jamal Uddin) — on a phone if you can.
 3. **Gate log** — *Gate opened*, then *Gate closed*. *Expect:* the hourly traffic chart moves.
 4. **Facilities** — a lift is stuck? Tap *Out of order* on Lift B. Tap *Running* when it's fixed.
 5. **Safety & access** — the emergency numbers (tap to call) and the intercom log.
+6. **The door panel** — in a terminal, `java tools/device-simulator/DeviceSimulator.java --device 1 --demo`.
+   *Expect:* North Gate Intercom turns **online**; its ring and card swipes (one *allowed*, one
+   *denied*) appear in the log. Press **Open door**. *Expect:* the simulator prints
+   "door released for 5 s by Jamal Uddin" and closes it again; the Gate log gains *open* and *close*.
+   Stop the simulator (`quit`) — the panel goes **offline**.
 
 ## 4. Staff — the shift
 
@@ -114,6 +119,8 @@ Use one normal window (the owner) and one private window (everyone else, one at 
 - **Concurrency:** two simultaneous checkouts of one invoice write exactly one payment; two simultaneous
   bookings of one slot leave exactly one winner — both are pinned by the test suite.
 - **Live chat** runs over a WebSocket whose handshake checks the session token.
+- **Threads and sockets:** the door panel holds a TCP connection to the server's device gateway, served
+  by its own worker thread; *Open door* is a web request thread writing to that same socket.
 - **Invitation links** keep their token in the `#fragment`, so it never reaches a server log; only its
   hash is stored. And a resident lister can decline an outsider, but only the committee can let one in.
 - **One call** — `GET /api/dashboard/summary/` returns 8 metrics and 32 sections, with a statement

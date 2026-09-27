@@ -162,6 +162,7 @@ On macOS and Linux use `./mvnw` in place of `.\mvnw.cmd`.
 | Backend API | <http://localhost:8000> |
 | Frontend (Vite dev server) | <http://127.0.0.1:5173> |
 | MySQL | `localhost:3306` |
+| Device gateway (door panels, TCP) | `localhost:9500` — try it with `java tools/device-simulator/DeviceSimulator.java --device 1 --demo` |
 
 The Vite dev server proxies `/api`, `/media` and `/ws` to port 8000, so there is no CORS setup and no
 absolute API URL in the app code.
