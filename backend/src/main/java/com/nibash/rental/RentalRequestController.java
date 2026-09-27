@@ -243,7 +243,7 @@ public class RentalRequestController {
         Listing listing = request.getListing();
         String where = listing.getTitle() + " at " + listing.getBuilding().getName();
         if (RentalRequest.APPROVED.equals(request.getStatus())) {
-            notifications.email(request.getApplicant().getEmail(), "Your rental request was approved",
+            notifications.emailLater(request.getApplicant().getEmail(), "Your rental request was approved",
                     """
                     Hello %s,
 
@@ -251,7 +251,7 @@ public class RentalRequestController {
                     Sign in to Nibash to see your building: %s/login
                     """.formatted(request.getApplicant().getName(), where, appUrl));
         } else if (RentalRequest.REJECTED.equals(request.getStatus())) {
-            notifications.email(request.getApplicant().getEmail(), "Your rental request",
+            notifications.emailLater(request.getApplicant().getEmail(), "Your rental request",
                     """
                     Hello %s,
 

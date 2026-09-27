@@ -28,5 +28,5 @@ USER nibash
 # MySQL can share a small VM (plan §9, "Azure free-tier RAM starves JVM + MySQL").
 ENV NIBASH_MEDIA_DIR=/app/media \
     JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError"
-EXPOSE 8000
+EXPOSE 8000 9500
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

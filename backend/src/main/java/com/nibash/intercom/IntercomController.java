@@ -7,7 +7,10 @@ import com.nibash.common.Body;
 import com.nibash.common.PageEnvelope;
 import com.nibash.common.Policy;
 import com.nibash.common.Times;
+import com.nibash.device.DeviceGateway;
+import com.nibash.device.DeviceRegistry;
 import com.nibash.tenancy.TenantService;
+import com.nibash.user.Roles;
 import com.nibash.user.User;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -30,6 +33,10 @@ import org.springframework.web.bind.annotation.*;
  * <p>The webhook is {@code AllowAny} in the spec, which lets anyone forge door events. When
  * {@code nibash.intercom.webhook-secret} is set, the panel must send it as {@code X-Intercom-Secret};
  * left blank (the default) the endpoint behaves exactly as specified.
+ *
+ * <p>Panels can also stay connected over TCP to the {@link DeviceGateway}; the device list then
+ * reports which are online, and {@code POST /api/intercom/devices/{id}/open/} pushes {@code OPEN}
+ * down that connection to release the door.
  */
 @RestController
 @RequestMapping("/api/intercom")
@@ -42,22 +49,35 @@ public class IntercomController {
     private final IntercomLogRepository logs;
     private final BuildingRepository buildings;
     private final TenantService tenancy;
+    private final DeviceRegistry registry;
+    private final DeviceGateway gateway;
     private final String webhookSecret;
 
+    /** How long an {@code OPEN} from the app holds the door released. */
+    static final int RELEASE_SECONDS = 5;
+
     public IntercomController(IntercomDeviceRepository devices, IntercomLogRepository logs,
-                              BuildingRepository buildings, TenantService tenancy,
+                              BuildingRepository buildings, TenantService tenancy, DeviceRegistry registry,
+                              DeviceGateway gateway,
                               @Value("${nibash.intercom.webhook-secret:}") String webhookSecret) {
         this.devices = devices;
         this.logs = logs;
         this.buildings = buildings;
         this.tenancy = tenancy;
+        this.registry = registry;
+        this.gateway = gateway;
         this.webhookSecret = webhookSecret == null ? "" : webhookSecret.trim();
     }
 
-    public record DeviceDto(Long id, Long building, String deviceName, String ipAddress) {
+    /** {@code online}, {@code connected_since} and {@code last_seen} come from the live gateway connection. */
+    public record DeviceDto(Long id, Long building, String deviceName, String ipAddress, boolean online,
+                            LocalDateTime connectedSince, LocalDateTime lastSeen) {
 
-        public static DeviceDto from(IntercomDevice d) {
-            return new DeviceDto(d.getId(), d.getBuilding().getId(), d.getDeviceName(), d.getIpAddress());
+        public static DeviceDto from(IntercomDevice d, DeviceRegistry registry) {
+            var status = registry.status(d.getId());
+            return new DeviceDto(d.getId(), d.getBuilding().getId(), d.getDeviceName(), d.getIpAddress(),
+                    status.isPresent(), status.map(DeviceRegistry.Status::connectedAt).orElse(null),
+                    status.map(DeviceRegistry.Status::lastSeen).orElse(null));
         }
     }
 
@@ -105,13 +125,13 @@ public class IntercomController {
             return new PageEnvelope<>(0, null, null, List.of());
         }
         var pageable = PageRequest.of(Math.max(page - 1, 0), PageEnvelope.PAGE_SIZE, Sort.by("deviceName"));
-        return PageEnvelope.of(devices.findByBuildingIdIn(scope, pageable), DeviceDto::from);
+        return PageEnvelope.of(devices.findByBuildingIdIn(scope, pageable), d -> DeviceDto.from(d, registry));
     }
 
     @GetMapping("/devices/{id}/")
     @Transactional(readOnly = true)
     public DeviceDto device(@PathVariable Long id) {
-        return DeviceDto.from(scopedDevice(id));
+        return DeviceDto.from(scopedDevice(id), registry);
     }
 
     @PostMapping("/devices/")
@@ -126,7 +146,7 @@ public class IntercomController {
         device.setBuilding(buildings.findById(buildingId).orElseThrow(() -> ApiException.notFound("Not found.")));
         device.setDeviceName(Body.requireStr(body, "device_name"));
         device.setIpAddress(requireIp(body, buildingId, null));
-        return ResponseEntity.status(HttpStatus.CREATED).body(DeviceDto.from(devices.save(device)));
+        return ResponseEntity.status(HttpStatus.CREATED).body(DeviceDto.from(devices.save(device), registry));
     }
 
     @PatchMapping("/devices/{id}/")
@@ -140,7 +160,38 @@ public class IntercomController {
         if (body.containsKey("ip_address")) {
             device.setIpAddress(requireIp(body, device.getBuilding().getId(), device.getId()));
         }
-        return DeviceDto.from(devices.save(device));
+        return DeviceDto.from(devices.save(device), registry);
+    }
+
+    /**
+     * Releases the door from the app: {@code OPEN <seconds> <name>} is written to the panel's live
+     * connection by this request's thread. Guards and managers only; an offline panel is a 400.
+     */
+    @PostMapping("/devices/{id}/open/")
+    @Transactional
+    public Map<String, Object> open(@PathVariable Long id) {
+        User caller = CurrentUser.require();
+        if (!caller.isBackOffice() && !caller.isAdminOrCommittee() && !Roles.GUARD.equals(caller.getRole())) {
+            throw ApiException.forbidden("Only guards and the committee can open the door.");
+        }
+        IntercomDevice device = scopedDevice(id);
+        if (!registry.send(device.getId(), "OPEN " + RELEASE_SECONDS + " " + caller.getName())) {
+            throw ApiException.badRequest(device.getDeviceName() + " is offline, so the door can't be opened from here.");
+        }
+        IntercomLog log = new IntercomLog();
+        log.setDevice(device);
+        log.setEventType("remote_open");
+        log.setTimestamp(Times.now());
+        log.setDetails("Door released from Nibash by " + caller.getName() + ".");
+        logs.save(log);
+        return Map.of("detail", "Door released at " + device.getDeviceName() + ".");
+    }
+
+    /** Where panels connect, and how many are connected across the caller's view. */
+    @GetMapping("/gateway/")
+    public Map<String, Object> gateway() {
+        CurrentUser.require();
+        return Map.of("enabled", gateway.isEnabled(), "port", gateway.port(), "connected", registry.size());
     }
 
     @PutMapping("/devices/{id}/")

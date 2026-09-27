@@ -4,6 +4,7 @@ import com.nibash.finance.Invoice;
 import com.nibash.finance.InvoiceRepository;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       The spec leaves this unautomated (§15.10) and sanctions adding it.</li>
  *   <li><b>Reminders</b>, 08:00 (spec §10) — every pending or overdue invoice due by tomorrow gets
  *       an email. Rows without an address are skipped and a failure for one recipient never stops
- *       the rest.</li>
+ *       the rest. The emails go out concurrently on the mail pool, so with a slow SMTP server the
+ *       batch waits on several round trips at once instead of one resident after another.</li>
  * </ul>
  * Both are plain public methods too, so tests and operators can run them on demand.
  */
@@ -54,21 +56,15 @@ public class InvoiceJobs {
     @Transactional(readOnly = true)
     public int sendReminders() {
         List<Invoice> due = invoices.findDueForReminder(LocalDate.now(zone).plusDays(1));
-        int sent = 0;
+        // Read everything on this thread, inside the transaction; the mail pool only does network I/O.
+        List<NotificationService.Email> batch = new ArrayList<>();
         for (Invoice invoice : due) {
             String email = invoice.getResident().getUser().getEmail();
-            if (email == null || email.isBlank()) {
-                continue;
-            }
-            try {
-                if (notifications.email(email, subject(invoice), body(invoice))) {
-                    sent++;
-                }
-            } catch (RuntimeException e) {
-                // NotificationService already swallows mail errors; this guards anything unexpected
-                log.warn("Reminder for invoice {} failed: {}", invoice.getInvoiceNumber(), e.getMessage());
+            if (email != null && !email.isBlank()) {
+                batch.add(new NotificationService.Email(email, subject(invoice), body(invoice)));
             }
         }
+        int sent = notifications.emailAll(batch);
         log.info("Invoice reminders: {} sent of {} due", sent, due.size());
         return sent;
     }

@@ -30,5 +30,10 @@ nibash:
     enabled: false        # the suite calls the jobs directly; never let the scheduler fire mid-run
   intercom:
     webhook-secret: ""
+  devices:
+    port: 0                   # any free port, so a running dev server on 9500 never clashes
+    workers: 16
+    idle-timeout-seconds: 3   # short, so the idle-disconnect test is quick
+    secret: ""
   cors:
     allowed-origins: http://127.0.0.1:5173

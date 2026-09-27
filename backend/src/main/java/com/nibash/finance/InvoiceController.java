@@ -225,7 +225,7 @@ public class InvoiceController {
         if (Invoice.PAID.equals(invoice.getStatus())) {
             throw ApiException.badRequest("Invoice is already paid.");
         }
-        outbound.email(invoice.getResident().getUser().getEmail(),
+        outbound.emailLater(invoice.getResident().getUser().getEmail(),
                 InvoiceJobs.subject(invoice), InvoiceJobs.body(invoice));
 
         Notification notice = new Notification();

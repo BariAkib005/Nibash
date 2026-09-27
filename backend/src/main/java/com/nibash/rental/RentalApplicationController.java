@@ -136,7 +136,7 @@ public class RentalApplicationController {
             return;
         }
         String phone = applicant.getPhone() == null || applicant.getPhone().isBlank() ? "" : " · " + applicant.getPhone();
-        notifications.email(lister.getEmail(), "New request for " + listing.getTitle(),
+        notifications.emailLater(lister.getEmail(), "New request for " + listing.getTitle(),
                 """
                 Hello %s,
 

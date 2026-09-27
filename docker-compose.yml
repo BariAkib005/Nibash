@@ -62,6 +62,12 @@ services:
       NIBASH_CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
       # The base of the links in invitation and rental emails.
       NIBASH_APP_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      # Door hardware (TCP). Inside Docker every panel appears to come from the bridge address, so
+      # the registered-IP check can't identify one: set a secret and give it to the panels.
+      NIBASH_DEVICE_SECRET: ${NIBASH_DEVICE_SECRET:-}
+    ports:
+      # The device gateway panels connect to. Nginx serves the web app; this is plain TCP.
+      - "${DEVICE_PORT:-9500}:9500"
     volumes:
       - media:/app/media
     healthcheck:

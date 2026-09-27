@@ -64,6 +64,20 @@ nibash:
     enabled: ${NIBASH_JOBS_ENABLED:true}
   mail:
     from: ${NIBASH_MAIL_FROM:no-reply@nibash.bd}
+    # Mail is sent on its own thread pool: reminder batches go out concurrently, and request-time
+    # emails are handed off after commit so no web request waits on SMTP.
+    threads: ${NIBASH_MAIL_THREADS:4}
+  devices:
+    # The TCP gateway intercom panels, card readers and gate controllers connect to (see README,
+    # "Door hardware"). One worker thread per connected panel.
+    enabled: ${NIBASH_DEVICES_ENABLED:true}
+    port: ${NIBASH_DEVICE_PORT:9500}
+    workers: ${NIBASH_DEVICE_WORKERS:32}
+    # A panel that sends nothing (not even PING) for this long is treated as disconnected.
+    idle-timeout-seconds: ${NIBASH_DEVICE_IDLE_SECONDS:60}
+    # When set, panels must send it in HELLO. When empty, a panel is trusted only from the IP address
+    # it was registered with (or from this machine, for the simulator).
+    secret: ${NIBASH_DEVICE_SECRET:}
   intercom:
     # When set, POST /api/intercom/webhook requires this value in the X-Intercom-Secret header.
     webhook-secret: ${NIBASH_INTERCOM_WEBHOOK_SECRET:}
