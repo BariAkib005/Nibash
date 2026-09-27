@@ -9,6 +9,7 @@ import type {
   ApiDocumentAudit,
   ApiIntercomDevice,
   ApiIntercomLog,
+  DeviceGatewayInfo,
   ApiLiftStatus,
   ApiInvitation,
   ApiListing,
@@ -655,6 +656,12 @@ export const api = {
   // ---------------------------------------------------------------- security & safety (Week 5)
   intercomDevices: (building_id?: number) =>
     request<Page<ApiIntercomDevice>>(`/api/intercom/devices/${qs({ building_id })}`),
+
+  /** Pushes OPEN down the panel's live connection; a 400 when the panel is offline. */
+  openDoor: (deviceId: number) =>
+    request<{ detail: string }>(`/api/intercom/devices/${deviceId}/open/`, { method: 'POST' }),
+
+  deviceGateway: () => request<DeviceGatewayInfo>('/api/intercom/gateway/'),
 
   intercomLogs: (params: { page?: number; building_id?: number } = {}) =>
     request<Page<ApiIntercomLog>>(`/api/intercom/logs/${qs(params)}`),

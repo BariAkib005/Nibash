@@ -11,13 +11,21 @@ import PageHeader from '../components/PageHeader'
 import { Button, Card, Field, Modal, Select, Skeleton } from '../components/ui'
 import Icon from '../components/Icon'
 import { formatDate, formatDateTime } from '../lib/format'
-import type { ApiAccessCard, ApiIntercomLog } from '../types'
+import type { ApiAccessCard, ApiIntercomDevice, ApiIntercomLog } from '../types'
 
 const CARD_TONE = { active: 'green', lost: 'amber', revoked: 'slate' } as const
+const EVENT_TONE: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
+  ring: 'blue',
+  card_allowed: 'green',
+  card_denied: 'red',
+  remote_open: 'amber',
+}
 
 /**
- * Safety & access: the numbers to call in an emergency (everyone), the intercom's event log
- * (guards and managers), and door access cards (managers issue and revoke; residents see their own).
+ * Safety & access: the numbers to call in an emergency (everyone), the intercom's panels and event
+ * log (guards and managers), and door access cards (managers issue and revoke; residents see their
+ * own). Panels connected to the device gateway show as online, and a guard can release the door
+ * from here; the page re-checks every few seconds so a panel going on- or offline shows up.
  */
 export default function Safety() {
   const { user } = useAuth()
@@ -39,11 +47,31 @@ export default function Safety() {
     queryKey: ['intercom-devices', currentId],
     queryFn: () => api.intercomDevices(currentId),
     enabled: seesIntercom && Boolean(currentId),
+    refetchInterval: 10_000,
+  })
+  const { data: gateway } = useQuery({
+    queryKey: ['device-gateway'],
+    queryFn: () => api.deviceGateway(),
+    enabled: canManage,
+    staleTime: 5 * 60 * 1000,
   })
   const { data: logs, isLoading: logsLoading } = useQuery({
     queryKey: ['intercom-logs', currentId, logPage],
     queryFn: () => api.intercomLogs({ building_id: currentId, page: logPage }),
     enabled: seesIntercom && Boolean(currentId),
+    refetchInterval: 10_000,
+  })
+
+  const openDoor = useMutation({
+    mutationFn: (device: ApiIntercomDevice) => api.openDoor(device.id),
+    onSuccess: (reply) => {
+      toast.success(reply.detail)
+      queryClient.invalidateQueries({ queryKey: ['intercom-logs'] })
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : 'Could not reach the panel.')
+      queryClient.invalidateQueries({ queryKey: ['intercom-devices'] })
+    },
   })
   const { data: cards, isLoading: cardsLoading } = useQuery({
     queryKey: ['access-cards', currentId],
@@ -63,7 +91,7 @@ export default function Safety() {
   const ownCards = (cards?.results ?? []).filter((c) => c.resident === residentId)
 
   const logColumns: Column<ApiIntercomLog>[] = [
-    { key: 'event', header: 'Event', render: (l) => <Badge tone={l.event_type === 'ring' ? 'blue' : 'slate'}>{l.event_type.replace(/_/g, ' ')}</Badge> },
+    { key: 'event', header: 'Event', render: (l) => <Badge tone={EVENT_TONE[l.event_type] ?? 'slate'}>{l.event_type.replace(/_/g, ' ')}</Badge> },
     { key: 'device', header: 'Panel', render: (l) => l.device_name },
     { key: 'details', header: 'Details', render: (l) => l.details ?? <span className="text-slate-400">—</span> },
     { key: 'when', header: 'When', render: (l) => formatDateTime(l.timestamp) },
@@ -173,11 +201,46 @@ export default function Safety() {
               <h2 className="dashboard-section-title">Intercom</h2>
               <p className="mt-1 text-[11px] text-slate-500">
                 {devices?.results.length
-                  ? devices.results.map((d) => `${d.device_name} (${d.ip_address})`).join(' · ')
+                  ? 'Panels connect to the building’s device gateway; an online panel can be opened from here.'
                   : 'No panels registered.'}
+                {gateway?.enabled && ` Point panels at this server, port ${gateway.port}.`}
               </p>
             </div>
           </div>
+          {Boolean(devices?.results.length) && (
+            <div className="grid gap-3 md:grid-cols-2">
+              {devices!.results.map((device) => (
+                <Card key={device.id} className="flex items-center gap-3">
+                  <span
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${
+                      device.online ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    <Icon name={device.online ? 'phone' : 'lock'} size={18} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+                      <span className="truncate">{device.device_name}</span>
+                      <Badge tone={device.online ? 'green' : 'slate'}>{device.online ? 'online' : 'offline'}</Badge>
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                      {device.ip_address}
+                      {device.online && device.last_seen ? ` · last heard ${formatDateTime(device.last_seen)}` : ''}
+                    </p>
+                  </div>
+                  <Button
+                    variant={device.online ? 'primary' : 'secondary'}
+                    className="shrink-0 px-3 py-2 text-xs"
+                    disabled={!device.online || openDoor.isPending}
+                    onClick={() => openDoor.mutate(device)}
+                  >
+                    <Icon name="lock" size={14} />
+                    Open door
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          )}
           <DataTable
             columns={logColumns}
             rows={logs?.results ?? []}

@@ -683,11 +683,21 @@ export interface PriceEstimate {
 
 // ---------------------------------------------------------------- security & safety
 
+/** online / connected_since / last_seen come from the panel's live connection to the device gateway. */
 export interface ApiIntercomDevice {
   id: number
   building: number
   device_name: string
   ip_address: string
+  online: boolean
+  connected_since: string | null
+  last_seen: string | null
+}
+
+export interface DeviceGatewayInfo {
+  enabled: boolean
+  port: number
+  connected: number
 }
 
 export interface ApiIntercomLog {
