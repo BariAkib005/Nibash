@@ -2,7 +2,10 @@ package com.nibash.device;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.nibash.intercom.IntercomDeviceRepository;
 import com.nibash.support.ApiTestSupport;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -41,6 +44,8 @@ class DeviceGatewayTest extends ApiTestSupport {
 
     @Autowired DeviceGateway gateway;
     @Autowired DeviceRegistry registry;
+    @Autowired IntercomDeviceRepository devices;
+    @Autowired EntityManagerFactory entityManagerFactory;
 
     @Test
     void aPanelSignsInChecksCardsAndReportsTheDoor() throws Exception {
@@ -119,40 +124,47 @@ class DeviceGatewayTest extends ApiTestSupport {
                     .get("id").asLong());
         }
 
-        // Every panel connects at once and stays connected until all of them are in.
-        CyclicBarrier allConnected = new CyclicBarrier(panels + 1);
-        CountDownLatch done = new CountDownLatch(panels);
         ExecutorService clients = Executors.newFixedThreadPool(panels);
-        List<Future<List<String>>> replies = new ArrayList<>();
-        for (long id : ids) {
-            replies.add(clients.submit(() -> {
-                try (Panel panel = new Panel(gateway.port())) {
-                    List<String> got = new ArrayList<>();
-                    got.add(panel.say("HELLO " + id));
-                    got.add(panel.say("CARD GLH-AC-0001"));
-                    got.add(panel.say("DOOR OPENED"));
-                    allConnected.await(10, TimeUnit.SECONDS);
-                    allConnected.await(10, TimeUnit.SECONDS); // held open while the test looks
-                    got.add(panel.say("BYE"));
-                    return got;
-                } finally {
-                    done.countDown();
-                }
-            }));
-        }
-        allConnected.await(10, TimeUnit.SECONDS);
-        for (long id : ids) {
-            assertThat(registry.status(id)).as("panel %d online", id).isPresent();
-        }
-        assertThat(gateway.activeConnections()).isGreaterThanOrEqualTo(panels);
-        allConnected.await(10, TimeUnit.SECONDS);
-        assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
-        clients.shutdown();
+        try {
+            // Every panel connects at once and stays connected until all of them are in.
+            CyclicBarrier allConnected = new CyclicBarrier(panels + 1);
+            CountDownLatch done = new CountDownLatch(panels);
+            List<Future<List<String>>> replies = new ArrayList<>();
+            for (long id : ids) {
+                replies.add(clients.submit(() -> {
+                    try (Panel panel = new Panel(gateway.port())) {
+                        List<String> got = new ArrayList<>();
+                        got.add(panel.say("HELLO " + id));
+                        got.add(panel.say("CARD GLH-AC-0001"));
+                        got.add(panel.say("DOOR OPENED"));
+                        allConnected.await(10, TimeUnit.SECONDS);
+                        allConnected.await(10, TimeUnit.SECONDS); // held open while the test looks
+                        got.add(panel.say("BYE"));
+                        return got;
+                    } finally {
+                        done.countDown();
+                    }
+                }));
+            }
+            allConnected.await(10, TimeUnit.SECONDS);
+            for (long id : ids) {
+                assertThat(registry.status(id)).as("panel %d online", id).isPresent();
+            }
+            assertThat(gateway.activeConnections()).isGreaterThanOrEqualTo(panels);
+            allConnected.await(10, TimeUnit.SECONDS);
+            assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
 
-        for (Future<List<String>> reply : replies) {
-            List<String> got = reply.get();
-            assertThat(got.get(0)).startsWith("OK Block panel");
-            assertThat(got.subList(1, 4)).containsExactly("ALLOW Ayesha", "OK", "BYE");
+            for (Future<List<String>> reply : replies) {
+                List<String> got = reply.get();
+                assertThat(got.get(0)).startsWith("OK Block panel");
+                assertThat(got.subList(1, 4)).containsExactly("ALLOW Ayesha", "OK", "BYE");
+            }
+        } finally {
+            clients.shutdownNow();
+            for (long id : ids) {
+                awaitOffline(id); // its worker thread writes the "offline" row as it winds down
+            }
+            deleteDevices(ids);
         }
     }
 
@@ -208,14 +220,27 @@ class DeviceGatewayTest extends ApiTestSupport {
 
     // ---------------------------------------------------------------- helpers
 
+    /** The seeded panel, found by its registered address rather than by scanning a page of devices. */
     private long northGate(String token) throws Exception {
-        long building = buildingId(token);
-        for (JsonNode row : getJson("/api/intercom/devices/?building_id=" + building, token).get("results")) {
-            if (row.get("device_name").asString().equals("North Gate Intercom")) {
-                return row.get("id").asLong();
-            }
+        return devices.findByBuildingIdAndIpAddress(buildingId(token), "192.168.10.25")
+                .orElseThrow(() -> new IllegalStateException("The seeded North Gate Intercom is missing"))
+                .getId();
+    }
+
+    /** Removes panels a test registered, with their log rows, so repeated runs don't pile them up. */
+    private void deleteDevices(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return;
         }
-        throw new IllegalStateException("The seeded North Gate Intercom is missing");
+        EntityManager em = entityManagerFactory.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            em.createQuery("delete from IntercomLog l where l.device.id in :ids").setParameter("ids", ids).executeUpdate();
+            em.createQuery("delete from IntercomDevice d where d.id in :ids").setParameter("ids", ids).executeUpdate();
+            em.getTransaction().commit();
+        } finally {
+            em.close();
+        }
     }
 
     private JsonNode deviceRow(String token, long building, long device) throws Exception {
